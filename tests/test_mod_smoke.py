@@ -670,8 +670,8 @@ class AimTimerTest(_StubbedGameTest):
         self.assertEqual(self.part('Percent')['alpha'], 0.7)
         self.assertEqual((self.part('Track')['x'], self.part('Track')['y']), (150, 0))
         self.assertEqual((self.part('Track')['width'], self.part('Track')['height'], self.part('Track')['alpha']),
-                         (6, 64, 0.35))
-        self.assertEqual((self.part('Fill')['width'], self.part('Fill')['height']), (6, 32))
+                         (10, 64, 0.35))
+        self.assertEqual((self.part('Fill')['width'], self.part('Fill')['height']), (10, 32))
         self.assertEqual(self.part('Fill')['y'], 16)
         self.assertEqual(self.part('Fill')['alpha'], 0.85)
         self.assertIn('amber.png', self.part('Fill')['image'])
@@ -729,7 +729,7 @@ class AimTimerTest(_StubbedGameTest):
         self.assertIn("color='#FCAF1A'>80%<", self.part('Percent')['text'])
         self.assertEqual(self.part('Limit')['y'], int(round(32 - 64 * 0.6)))
         self.assertEqual((self.part('Limit')['width'], self.part('Limit')['height'], self.part('Limit')['alpha']),
-                         (12, 2, 0.5))
+                         (16, 2, 0.5))
         self.assertTrue(self.visible('Locked'))
         self.assertEqual((self.part('Locked')['height'], self.part('Locked')['alpha']), (26, 0.5))
         self.assertIn('grey.png', self.part('Locked')['image'])
