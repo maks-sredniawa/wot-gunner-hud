@@ -55,7 +55,7 @@ On guns with dual accuracy, the circle gets much smaller once the gun has cooled
 - **100%** is the hot gun fully aimed, as on any tank. A tick on the bar marks it.
 - **The part above the tick** is the extra the cooled gun gives. It is solid grey while the gun cools after a shot, with the seconds until it has cooled next to it, and empty once the gun has cooled.
 - **Aiming past 100%** fills that part in cyan. The percentage keeps counting up to the gun's real gain, the hot circle divided by the cooled one, which the mod reads from the gun itself: 173% on the Type 71.
-- **A full bar with no seconds left** is the best shot the gun can make. Only then does the bar fade back, the cyan part with it.
+- **A full bar with no seconds left** is the best shot the gun can make. Only then does the bar fade back, the cyan part with it. While the gun cools it stays bright even with the hot circle reached, because the grey part and its countdown are still changing.
 
 The game doesn't tell the client how long the cooldown is after crew skills, so the first countdown of a battle uses the gun's base delay. After one full cycle the mod counts with the delay it measured. The countdown starts when the server switches the accurate mode off, so ping shifts it slightly.
 

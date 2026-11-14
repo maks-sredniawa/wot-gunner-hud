@@ -48,6 +48,7 @@ class GunnerHud(object):
         wanted = self._settings['aimTimer']['enabled']
         if wanted and self._aim_view is None:
             self._aim_view = AimBarView(self._settings, self._on_moved)
+            self._aim_smoother.reset()
             if self._crosshair is not None:
                 self._on_crosshair_changed()
         elif not wanted and self._aim_view is not None:

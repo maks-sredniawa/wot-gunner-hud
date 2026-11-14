@@ -117,8 +117,9 @@ class AimBarView(object):
         font_size = self._settings['fontSize']
         self._show_label(SECONDS, format_seconds(display), colors['loading'], font_size - 1, SECONDS_ALPHA,
                          self._label_position(SECONDS))
-        self._show_label(PERCENT, format_percent(display), colors['loaded'] if display.full else colors['loading'],
-                         font_size - 2, faded(PERCENT_ALPHA, display.fade), self._label_position(PERCENT))
+        percent_color = colors['loaded'] if display.normal_reached else colors['loading']
+        self._show_label(PERCENT, format_percent(display), percent_color, font_size - 2,
+                         faded(PERCENT_ALPHA, display.fade), self._label_position(PERCENT))
         locked_middle = (cy - BAR_HEIGHT / 2 + bottom - BAR_HEIGHT * (display.limit or 0)) / 2
         self._show_label(COOLDOWN, format_cooldown(display), colors['shellTime'], font_size - 2, 1.0,
                          (cx + COOLDOWN_X, int(round(locked_middle))))
@@ -126,7 +127,7 @@ class AimBarView(object):
     def _show_fill(self, display, cx, bottom):
         normal = int(round(BAR_HEIGHT * min(display.fill, display.limit or 1.0)))
         gain = int(round(BAR_HEIGHT * display.fill)) - normal
-        fill_look = dict(_image('green'), alpha=faded(FULL_ALPHA, display.fade)) if display.full else \
+        fill_look = dict(_image('green'), alpha=faded(FULL_ALPHA, display.fade)) if display.normal_reached else \
             dict(_image('amber'), alpha=AIMING_ALPHA)
         self._show_segment(FILL, normal, cx, bottom, fill_look)
         self._show_segment(GAIN, gain, cx, bottom - normal, {'alpha': faded(GAIN_ALPHA, display.fade)})

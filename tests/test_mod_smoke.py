@@ -809,6 +809,17 @@ class AimTimerTest(_StubbedGameTest):
         self.mod.init()
         self.assertFalse([alias for alias in self.guiflash.components if alias.startswith('maksforgeGunnerHudAim')])
 
+    def test_switching_the_aim_timer_off_and_on_in_battle_starts_the_bar_afresh(self):
+        self.tick([0.2, 0.2, 0.2, 0.2], at=100.1)
+        self.tick(at=101.0)
+        timer = self.mod._timer
+        timer.settings['aimTimer']['enabled'] = False
+        timer.apply_settings()
+        timer.settings['aimTimer']['enabled'] = True
+        timer.apply_settings()
+        self.tick(at=102.0)
+        self.assertEqual(self.part('Fill')['alpha'], 0.9)
+
 
 LINKAGE = 'maksforge.gunner_hud'
 CONFIG_PATH = os.path.join('mods', 'configs', 'gunner_hud', 'config.json')

@@ -2,10 +2,6 @@ from __future__ import division
 
 import math
 
-AIMING = 'aiming'
-ACCURATE = 'accurate'
-AIMED = 'aimed'
-
 AIMED_BELOW_SECONDS = 0.05
 _PLAUSIBLE_DELAY = (0.5, 2.0)
 
@@ -35,10 +31,9 @@ class DualAccuracy(object):
 
 
 class AimStatus(object):
-    __slots__ = ('phase', 'fill', 'percent', 'seconds', 'limit', 'locked', 'cooldown')
+    __slots__ = ('fill', 'percent', 'seconds', 'limit', 'locked', 'cooldown')
 
-    def __init__(self, phase, fill, percent, seconds, limit=None, locked=False, cooldown=None):
-        self.phase = phase
+    def __init__(self, fill, percent, seconds, limit=None, locked=False, cooldown=None):
         self.fill = fill
         self.percent = percent
         self.seconds = seconds
@@ -68,19 +63,16 @@ def aim_status(current, stationary_best, aiming_time, dual=None):
     accurate_ideal = stationary_best * dual.factor if dual is not None else stationary_best
     ideal = accurate_ideal if dual is not None and dual.active else stationary_best
     seconds = seconds_to_aim(current, ideal, aiming_time)
-    aimed = seconds < AIMED_BELOW_SECONDS
-    if aimed:
+    if seconds < AIMED_BELOW_SECONDS:
         current = ideal
     if dual is None:
         percent = _ratio(ideal, current)
-        return AimStatus(AIMED if aimed else AIMING, percent, percent, seconds)
+        return AimStatus(percent, percent, seconds)
     fill = _ratio(accurate_ideal, current)
     percent = fill / dual.factor
     if dual.active:
-        phase = AIMED if aimed else ACCURATE
-        return AimStatus(phase, fill, percent, seconds, limit=dual.factor)
-    return AimStatus(AIMED if aimed else AIMING, min(fill, dual.factor), percent, seconds,
-                     limit=dual.factor, locked=True, cooldown=dual.cooldown)
+        return AimStatus(fill, percent, seconds, limit=dual.factor)
+    return AimStatus(min(fill, dual.factor), percent, seconds, limit=dual.factor, locked=True, cooldown=dual.cooldown)
 
 
 class CooldownTracker(object):
@@ -118,12 +110,14 @@ class CooldownTracker(object):
 
 
 class AimDisplay(object):
-    __slots__ = ('fill', 'full', 'settled', 'fade', 'percent', 'seconds', 'limit', 'locked', 'cooldown')
+    __slots__ = ('fill', 'normal_reached', 'best_reached', 'fade', 'percent', 'seconds', 'limit', 'locked',
+                 'cooldown')
 
-    def __init__(self, fill, full, settled, fade, percent, seconds, limit=None, locked=False, cooldown=None):
+    def __init__(self, fill, normal_reached, best_reached, fade, percent, seconds, limit=None, locked=False,
+                 cooldown=None):
         self.fill = fill
-        self.full = full
-        self.settled = settled
+        self.normal_reached = normal_reached
+        self.best_reached = best_reached
         self.fade = fade
         self.percent = percent
         self.seconds = seconds
@@ -153,8 +147,8 @@ class _Latch(object):
         self.on, self._low_ticks = False, 0
 
 
-def _quantized_percent(value, full):
-    if full:
+def _quantized_percent(value, normal_reached):
+    if normal_reached:
         return max(100, int(round(value)))
     if value < PERCENT_STEPS_BELOW:
         return int(PERCENT_STEP * round(value / PERCENT_STEP))
@@ -167,46 +161,45 @@ class AimSmoother(object):
         self.reset()
 
     def reset(self):
-        # full: the normal circle is reached (green). settled: nothing is left to aim, so the bar fades.
-        self._full = _Latch()
-        self._settled = _Latch()
+        self._normal_reached = _Latch()
+        self._best_reached = _Latch()
         self._state = None
-        self._reach = None
+        self._locked = None
         self._fill = None
         self._raw_fill = None
         self._at = None
-        self._settled_at = None
+        self._best_reached_at = None
         self._percent = None
         self._percent_at = None
         self._seconds = None
         self._seconds_at = None
 
     def update(self, status, now):
-        reach = status.limit if status.locked else 1.0
-        if reach != self._reach:
-            self._reach = reach
-            self._settled.release()
+        if status.locked != self._locked:
+            self._locked = status.locked
+            self._best_reached.release()
         snapped = self._raw_fill is not None and self._raw_fill - status.fill > FILL_SNAP_DROP
         if snapped:
-            self._full.release()
-            self._settled.release()
-        full = self._full.update(status.percent)
-        settled = self._settled.update(status.fill / reach) and full
-        changed = (full, settled) != self._state
-        self._state = (full, settled)
+            self._normal_reached.release()
+            self._best_reached.release()
+        normal_reached = self._normal_reached.update(status.percent)
+        best_reached = self._best_reached.update(status.fill) and normal_reached
+        nothing_to_aim = best_reached or (normal_reached and status.locked)
+        changed = (normal_reached, best_reached) != self._state
+        self._state = (normal_reached, best_reached)
         reseed = changed or snapped
         self._smooth(status.fill, now, reseed)
         if changed:
-            self._settled_at = now if settled else None
-        if settled:
-            fill = reach
-        elif full:
+            self._best_reached_at = now if best_reached else None
+        if best_reached:
+            fill = 1.0
+        elif normal_reached:
             fill = max(self._fill, status.limit or 1.0)
         else:
             fill = self._fill
-        return AimDisplay(fill, full, settled, self._fade(now),
-                          self._update_percent(status, now, full, settled, reseed),
-                          self._update_seconds(status.seconds, now, settled, reseed),
+        return AimDisplay(fill, normal_reached, best_reached, self._fade(now),
+                          self._update_percent(status, now, normal_reached, nothing_to_aim, reseed),
+                          self._update_seconds(status.seconds, now, nothing_to_aim, reseed),
                           status.limit, status.locked, status.cooldown)
 
     def _smooth(self, raw, now, reseed):
@@ -218,21 +211,21 @@ class AimSmoother(object):
         self._raw_fill, self._at = raw, now
 
     def _fade(self, now):
-        if self._settled_at is None:
+        if self._best_reached_at is None:
             return 0.0
-        return max(0.0, min(1.0, (now - self._settled_at - GREEN_HOLD) / FADE_SECONDS))
+        return max(0.0, min(1.0, (now - self._best_reached_at - GREEN_HOLD) / FADE_SECONDS))
 
-    def _update_percent(self, status, now, full, settled, reseed):
+    def _update_percent(self, status, now, normal_reached, nothing_to_aim, reseed):
         smoothed = self._fill / (status.limit or 1.0) * 100
         if reseed:
-            self._percent, self._percent_at = _quantized_percent(smoothed, full), now
-        elif (not settled and now - self._percent_at >= TEXT_REFRESH - _EPSILON
+            self._percent, self._percent_at = _quantized_percent(smoothed, normal_reached), now
+        elif (not nothing_to_aim and now - self._percent_at >= TEXT_REFRESH - _EPSILON
               and abs(smoothed - self._percent) >= PERCENT_HYSTERESIS):
-            self._percent, self._percent_at = _quantized_percent(smoothed, full), now
+            self._percent, self._percent_at = _quantized_percent(smoothed, normal_reached), now
         return self._percent
 
-    def _update_seconds(self, raw, now, settled, reseed):
-        if settled:
+    def _update_seconds(self, raw, now, nothing_to_aim, reseed):
+        if nothing_to_aim:
             self._seconds = None
         elif reseed or self._seconds is None:
             self._seconds, self._seconds_at = raw, now
