@@ -104,7 +104,7 @@ The game writes `mods/configs/gunner_hud/config.json` the first time it starts w
 | `aimTimer` | | `enabled` (`true`) shows the aim timer. `x`, `y` (`150`, `0`) are its offset from the crosshair. Like the panel, it uses this spot in sniper and artillery view too until you drag it there, which adds a `sniper` or `strategic` key with its own `x`, `y`. |
 | `colors` | | Hex colours for the count, a full magazine, the loading shell, the queued shells, and the per-shell times. The Ares line and the aim timer's text reuse them. The bar's own colours are built in. |
 
-To move the panel or the aim timer, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. The panel and the aim timer each keep a separate position for arcade, sniper and artillery view, so drag them once in each.
+To move the panel or the aim timer, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. Sniper and artillery view use the same spot as arcade view; drag the panel or the aim timer while in one of those views to give that view its own position.
 
 ## Build
 
