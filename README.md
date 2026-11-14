@@ -40,11 +40,13 @@ The reload quick command stays the game's own on these tanks, and it already rep
 
 ## Aim timer
 
-A small bar to the right of the crosshair shows how far your gun has aimed, on every tank:
+A thin bar to the right of the crosshair shows how far your gun has aimed, on every tank:
 
-- **The seconds above it** count down until the circle is fully aimed. The **percentage below it** shows how far it has shrunk. Both are amber while aiming.
-- **Fully aimed**: the seconds disappear and the bar and `100%` turn green.
+- **The seconds above it** count down until the circle is fully aimed. The **percentage below it** shows how far it has shrunk, in 5% steps until 95%. Both are amber while aiming.
+- **Fully aimed**: the seconds disappear and the bar and `100%` turn green the moment the circle closes. After 0.3 s the bar, its track and the `100%` fade back so they don't pull your eye while you wait to shoot. It turns amber again once the circle has opened past 97% for 0.2 s, or at once after a shot or a sharp turn.
 - **While you drive**, it measures against the circle you'd reach standing still, so the seconds show how long you'd still need to aim after stopping.
+
+The bar eases toward the circle's real size instead of jumping with every bump, and the numbers change at most five times a second and only on a real change, so the circle's own wobble doesn't make them flicker. A sudden widening, such as a shot or a fast turn, shows at once.
 
 ### Type 71 line (dual accuracy)
 
@@ -53,7 +55,7 @@ On guns with dual accuracy, the circle gets much smaller once the gun has cooled
 - **100%** is the hot gun fully aimed, as on any tank. A tick on the bar marks it.
 - **The part above the tick** is the extra the cooled gun gives. It is solid grey while the gun cools after a shot, with the seconds until it has cooled next to it, and empty once the gun has cooled.
 - **Aiming past 100%** fills that part in cyan. The percentage keeps counting up to the gun's real gain, the hot circle divided by the cooled one, which the mod reads from the gun itself: 173% on the Type 71.
-- **A full bar with no seconds left** is the best shot the gun can make.
+- **A full bar with no seconds left** is the best shot the gun can make. Only then does the bar fade back, the cyan part with it.
 
 The game doesn't tell the client how long the cooldown is after crew skills, so the first countdown of a battle uses the gun's base delay. After one full cycle the mod counts with the delay it measured. The countdown starts when the server switches the accurate mode off, so ping shifts it slightly.
 
@@ -93,7 +95,7 @@ The game writes `mods/configs/gunner_hud/config.json` the first time it starts w
 | --- | --- | --- |
 | `enabled` | `true` | Turns the mod off without uninstalling it |
 | `x`, `y` | `0`, `60` | The panel's offset from the crosshair, which it follows frame by frame. Once you drag the panel in sniper or artillery view, a `sniper` or `strategic` key with its own `x`, `y` appears; until then that view uses these arcade values. |
-| `fontSize` | `14` | Text size. The settings page offers 10 to 24. |
+| `fontSize` | `14` | Text size. The aim timer's seconds are 1 smaller and its percentage 2 smaller. The settings page offers 10 to 24. |
 | `hideWhenFull` | `false` | Hide the panel while the magazine is full or an Ares gun is cold |
 | `reloadChatLine` | `true` | Replace the reload quick command with the magazine status line in autoreloaders |
 | `autoreloaderLine` | `true` | Show the shell times line on autoreloaders |
