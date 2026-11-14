@@ -488,6 +488,76 @@ class ReloadChatTest(_StubbedGameTest):
         self.assertEqual(self.press_reload(), ['game reload command'])
         self.assertEqual(logged, [RuntimeError])
 
+    def test_second_install_keeps_one_wrapper_and_takes_the_new_callbacks(self):
+        self.reload_chat.install(lambda: _slots(('loaded', 0.0), ('loading', 8.2)), lambda: True)
+        self.assertIs(self.chat_ctrl.__dict__['sendReloadingCommand'], self.reload_chat._send_reloading_command)
+        self.assertEqual(self.press_reload(), [('Magazine 1/2, full in 9 s', 0)])
+
+    def test_uninstall_removes_the_wrapper_when_the_original_was_inherited(self):
+        self.reload_chat.uninstall()
+
+        class Child(self.chat_ctrl):
+            pass
+
+        self.reload_chat.ChatCommandsController = Child
+        self.reload_chat.install(lambda: self.slots, lambda: True)
+        self.assertIn('sendReloadingCommand', Child.__dict__)
+        self.reload_chat.uninstall()
+        self.assertNotIn('sendReloadingCommand', Child.__dict__)
+        Child().sendReloadingCommand()
+        self.assertEqual(self.chat_ctrl.sent, ['game reload command'])
+
+
+class ReloadChatLifecycleTest(_StubbedGameTest):
+
+    def setUp(self):
+        super(ReloadChatLifecycleTest, self).setUp()
+        self.chat_ctrl = sys.modules['gui.battle_control.controllers.chat_cmd_ctrl'].ChatCommandsController
+        self.game_method = self.chat_ctrl.__dict__['sendReloadingCommand']
+        self.mod = importlib.import_module('gui.mods.mod_gunner_hud')
+        self.mod.init()
+        self.addCleanup(self.mod.fini)
+        self.events.onAvatarReady()
+
+    def press_reload(self):
+        del self.chat_ctrl.sent[:]
+        self.chat_ctrl().sendReloadingCommand()
+        return self.chat_ctrl.sent
+
+    def test_fini_restores_the_games_method_and_init_wraps_it_again(self):
+        self.mod.fini()
+        self.assertIs(self.chat_ctrl.__dict__['sendReloadingCommand'], self.game_method)
+        self.assertEqual(self.press_reload(), ['game reload command'])
+
+        self.mod.init()
+        self.events.onAvatarReady()
+        self.assertIsNot(self.chat_ctrl.__dict__['sendReloadingCommand'], self.game_method)
+        self.assertEqual(self.press_reload(), [('Magazine 1/3, full in 15 s', 0)])
+
+    def wrap_by_another_mod(self):
+        ours = self.chat_ctrl.sendReloadingCommand
+
+        def other_mod(controller):
+            self.chat_ctrl.sent.append('other mod')
+            ours(controller)
+
+        self.chat_ctrl.sendReloadingCommand = other_mod
+        return other_mod
+
+    def test_fini_leaves_another_mods_wrapper_and_ours_passes_straight_through(self):
+        other_mod = self.wrap_by_another_mod()
+        self.mod.fini()
+        self.assertIs(self.chat_ctrl.__dict__['sendReloadingCommand'], other_mod)
+        self.assertEqual(self.press_reload(), ['other mod', 'game reload command'])
+
+    def test_init_under_another_mods_wrapper_turns_ours_back_on_without_wrapping_again(self):
+        other_mod = self.wrap_by_another_mod()
+        self.mod.fini()
+        self.mod.init()
+        self.events.onAvatarReady()
+        self.assertIs(self.chat_ctrl.__dict__['sendReloadingCommand'], other_mod)
+        self.assertEqual(self.press_reload(), ['other mod', ('Magazine 1/3, full in 15 s', 0)])
+
 
 class MagazineDamageTest(_StubbedGameTest):
 

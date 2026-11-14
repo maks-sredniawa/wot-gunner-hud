@@ -23,6 +23,11 @@ def init():
 
 
 def fini():
+    global _reload_chat_installed
+    if _reload_chat_installed:
+        from gui.mods.gunner_hud import reload_chat
+        reload_chat.uninstall()
+        _reload_chat_installed = False
     if _timer is not None:
         _timer.stop()
 

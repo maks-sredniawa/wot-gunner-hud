@@ -53,23 +53,49 @@ def magazine_text(slots):
     return text
 
 
-def install(get_slots, is_on):
-    original = ChatCommandsController.sendReloadingCommand
-    team_chat = _TeamChat()
+_METHOD = 'sendReloadingCommand'
+_hook = {'original': None, 'original_raw': None, 'get_slots': None, 'is_on': None, 'active': False}
+_team_chat = _TeamChat()
 
-    def send_magazine_status():
-        if not is_on() or not avatar_getter.isPlayerOnArena() or not avatar_getter.isVehicleAlive():
-            return False
-        slots = get_slots()
-        text = magazine_text(slots) if slots else None
-        return bool(text) and team_chat.try_send(text)
 
-    def sendReloadingCommand(self):
+def _send_magazine_status():
+    if not _hook['is_on']() or not avatar_getter.isPlayerOnArena() or not avatar_getter.isVehicleAlive():
+        return False
+    slots = _hook['get_slots']()
+    text = magazine_text(slots) if slots else None
+    return bool(text) and _team_chat.try_send(text)
+
+
+def _send_reloading_command(self):
+    if _hook['active']:
         try:
-            if send_magazine_status():
+            if _send_magazine_status():
                 return
         except Exception:
             LOG_CURRENT_EXCEPTION()
-        original(self)
+    _hook['original'](self)
 
-    ChatCommandsController.sendReloadingCommand = sendReloadingCommand
+
+def _owns_method():
+    return ChatCommandsController.__dict__.get(_METHOD) is _send_reloading_command
+
+
+def install(get_slots, is_on):
+    _hook.update(get_slots=get_slots, is_on=is_on, active=True)
+    # Once wrapped, our function stays in the call chain even under another mod's wrapper, so wrapping again would loop.
+    if _hook['original'] is not None:
+        return
+    _hook['original'] = getattr(ChatCommandsController, _METHOD)
+    _hook['original_raw'] = ChatCommandsController.__dict__.get(_METHOD)
+    setattr(ChatCommandsController, _METHOD, _send_reloading_command)
+
+
+def uninstall():
+    _hook.update(get_slots=None, is_on=None, active=False)
+    if _hook['original'] is None or not _owns_method():
+        return
+    if _hook['original_raw'] is None:
+        delattr(ChatCommandsController, _METHOD)
+    else:
+        setattr(ChatCommandsController, _METHOD, _hook['original_raw'])
+    _hook.update(original=None, original_raw=None)

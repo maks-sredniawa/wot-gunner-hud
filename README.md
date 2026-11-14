@@ -9,6 +9,8 @@ A World of Tanks mod that shows what your gun is doing next to the crosshair:
 
 Until 0.6.0 it was called Autoloader Shell Timer.
 
+All the times it shows are estimates from the gun's state right now: firing, moving, or a change to your reload or aim modifiers (crew, equipment, consumables, a damaged module) can change them. Potential damage uses the loaded shell's nominal (average) damage, as if every shell penetrates.
+
 ## Autoreloaders
 
 ```
@@ -20,7 +22,7 @@ Until 0.6.0 it was called Autoloader Shell Timer.
 - **390** at the end: potential damage of those shells, as if every one penetrates.
 - When the magazine is full it shows each shell's own load time at your current reload speed in grey, fastest first, then **3/3** and the damage in green, for example `10.8   11.7   13.5   3/3   1170`.
 
-The times always use your current reload speed. They're recalculated every 0.1 s from the reload time the server sends for the shell being loaded, so a damaged ammo rack, stun, or a crew member knocked out changes them right away. The rest of the magazine is predicted from the gun's per-shell reload table at that same speed.
+The times always use your current reload speed. They're recalculated every 0.1 s from the reload time the server sends for the shell being loaded, so a damaged ammo rack, stun, or a crew member knocked out changes them right away. The rest of the magazine is predicted from the gun's per-shell reload table at that same speed, so the later shells and the full magazine time are estimates that shift whenever your reload speed changes.
 
 ## Regular autoloaders
 
@@ -30,11 +32,11 @@ Tanks whose whole magazine reloads at once show the shells left and their potent
 
 The Ares line has no magazine: every shot heats the gun, and too much heat locks it. On these tanks the same line shows how long the gun needs to cool down and how much damage you can still deal before it locks:
 
-- **8.4   560** while warm: the gun can fire and is fully cold in 8.4 s if you stop shooting, including the delay before cooling starts. The last number is the damage of the shots left before it locks.
+- **8.4   560** while warm: the gun can fire and is estimated to be fully cold in 8.4 s if you stop shooting, including the delay before cooling starts. The last number is the damage of the shots left before it locks.
 - **960** in green: the gun is cold and this is the damage of a full burst.
 - While the gun is locked the line is hidden, because the game shows its own lockout timer.
 
-The damage is shots left × the average damage of the loaded shell, as if every shell penetrates. It's capped by the shells you have left.
+The damage is shots left × the nominal (average) damage of the loaded shell, as if every shell penetrates. It's capped by the shells you have left.
 
 The reload quick command stays the game's own on these tanks, and it already reports the overheat time.
 
@@ -42,7 +44,7 @@ The reload quick command stays the game's own on these tanks, and it already rep
 
 A thin bar to the right of the crosshair shows how far your gun has aimed, on every tank:
 
-- **The seconds above it** count down until the circle is fully aimed. The **percentage below it** shows how far it has shrunk, in 5% steps until 95%. Both are amber while aiming.
+- **The seconds above it** estimate how long until the circle is fully aimed, at your current aiming speed; moving, turning or firing changes them. The **percentage below it** shows how far it has shrunk, in 5% steps until 95%. Both are amber while aiming.
 - **Fully aimed**: the seconds disappear and the bar and `100%` turn green the moment the circle closes. After 0.3 s the bar, its track and the `100%` fade back so they don't pull your eye while you wait to shoot. It turns amber again once the circle has opened past 97% for 0.2 s, or at once after a shot or a sharp turn.
 - **While you drive**, it measures against the circle you'd reach standing still, so the seconds show how long you'd still need to aim after stopping.
 
@@ -57,7 +59,7 @@ On guns with dual accuracy, the circle gets much smaller once the gun has cooled
 - **Aiming past 100%** fills that part in cyan. The percentage keeps counting up to the gun's real gain, the hot circle divided by the cooled one, which the mod reads from the gun itself: 173% on the Type 71.
 - **A full bar with no seconds left** is the best shot the gun can make. Only then does the bar fade back, the cyan part with it. While the gun cools it stays bright even with the hot circle reached, because the grey part and its countdown are still changing.
 
-The game doesn't tell the client how long the cooldown is after crew skills, so the first countdown of a battle uses the gun's base delay. After one full cycle the mod counts with the delay it measured. The countdown starts when the server switches the accurate mode off, so ping shifts it slightly.
+The game doesn't tell the client how long the cooldown is after crew skills, so the first countdown of a battle uses the gun's base delay. After one full cycle the mod counts with the delay it measured. The countdown starts when the server switches the accurate mode off, so ping shifts it slightly. It's an estimate: firing again restarts it.
 
 ## Reload quick command
 
@@ -68,6 +70,8 @@ Magazine 1/4, full in 35 s
 Magazine 0/4, first shell 9 s, full in 35 s
 Magazine 4/4
 ```
+
+The times in it are the same estimates as on screen, rounded up to whole seconds.
 
 Allies don't get the game's reload icon over your tank or the minimap animation for that command. If team chat is unavailable (chat turned off, a chat ban, or the chat cooldown), or you're out of shells (magazine and ammo rack both empty), the game's own command goes out as usual. Other tanks are not affected. Turn the line off with `reloadChatLine` to always send the game's command.
 
