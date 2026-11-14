@@ -9,6 +9,8 @@ CONFIG_DIR = os.path.join('mods', 'configs', 'gunner_hud')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 LEGACY_CONFIG_PATH = os.path.join('mods', 'configs', 'autoloader_timer', 'config.json')
 VIEW_POSITION_KEYS = ('sniper', 'strategic')
+# Defaults that 0.6.x and 0.7.0 wrote into every saved config; they are dropped so those views follow arcade again.
+FORMER_AIM_VIEW_DEFAULTS = {'sniper': {'x': 120, 'y': 60}, 'strategic': {'x': 180, 'y': 70}}
 
 DEFAULTS = {
     'enabled': True,
@@ -24,8 +26,6 @@ DEFAULTS = {
         'enabled': True,
         'x': 150,
         'y': 0,
-        'sniper': {'x': 120, 'y': 60},
-        'strategic': {'x': 180, 'y': 70},
     },
     'colors': {
         'count': 'D8D8D8',
@@ -49,9 +49,17 @@ def _merged(defaults, loaded):
     return result
 
 
+def _without_former_aim_defaults(settings):
+    aim = settings['aimTimer']
+    for key, former in FORMER_AIM_VIEW_DEFAULTS.items():
+        if aim.get(key) == former:
+            del aim[key]
+    return settings
+
+
 def _read(path):
     with codecs.open(path, 'r', 'utf-8-sig') as f:
-        return _merged(DEFAULTS, json.load(f))
+        return _without_former_aim_defaults(_merged(DEFAULTS, json.load(f)))
 
 
 def load():

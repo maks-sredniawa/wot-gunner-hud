@@ -788,14 +788,25 @@ class AimTimerTest(_StubbedGameTest):
         self.drag(self.alias('Track'), 120, 0)
         self.crosshair.view_id = 2
         self.crosshair.onCrosshairViewChanged(2)
-        sniper = self.mod._timer.settings['aimTimer']['sniper']
-        self.assertEqual((self.part('Track')['x'], self.part('Track')['y']), (sniper['x'], sniper['y']))
+        self.assertNotIn('sniper', self.mod._timer.settings['aimTimer'])
+        self.assertEqual((self.part('Track')['x'], self.part('Track')['y']), (120, 0))
         self.drag(self.alias('Track'), 300, 90)
+        sniper = self.mod._timer.settings['aimTimer']['sniper']
         self.assertEqual((sniper['x'], sniper['y']), (300, 90))
         self.crosshair.view_id = 1
         self.crosshair.onCrosshairViewChanged(1)
         self.assertEqual((self.part('Track')['x'], self.part('Track')['y']), (120, 0))
         self.assertEqual(self.mod._timer.settings['aimTimer']['x'], 120)
+
+    def test_former_default_view_positions_are_dropped_but_dragged_ones_kept(self):
+        config = sys.modules['gui.mods.gunner_hud.config']
+        settings = self.mod._timer.settings
+        settings['aimTimer']['sniper'] = {'x': 120, 'y': 60}
+        settings['aimTimer']['strategic'] = {'x': 200, 'y': 10}
+        config.save(settings)
+        loaded = config.load()
+        self.assertNotIn('sniper', loaded['aimTimer'])
+        self.assertEqual(loaded['aimTimer']['strategic'], {'x': 200, 'y': 10})
 
     def test_alphabetical_creation_order_stacks_the_fill_above_the_track(self):
         aim_view = sys.modules['gui.mods.gunner_hud.aim_view']
