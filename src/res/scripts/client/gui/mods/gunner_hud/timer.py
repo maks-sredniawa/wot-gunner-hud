@@ -11,6 +11,16 @@ from .aim_view import AimBarView
 from .view import PanelView, format_cooling, format_magazine, format_segments
 
 TICK_SECONDS = 0.1
+_GUN = 'gun'
+_CREW_ROLES = ('commander', 'gunner', 'driver', 'radioman', 'loader')
+
+
+def penalised(device_states, stun_end, server_time):
+    # Any injured crew member counts: the commander's bonus and Brothers in Arms reach the gunner too.
+    for name in device_states:
+        if name == _GUN or name.startswith(_CREW_ROLES):
+            return True
+    return stun_end > 0 and stun_end > server_time()
 
 
 class GunnerHud(object):
@@ -22,7 +32,9 @@ class GunnerHud(object):
         self._aim_view = None
         self._cooldown = aim.CooldownTracker()
         self._aim_smoother = aim.AimSmoother()
+        self._penalty = aim.PenaltyTracker()
         self._last_accurate_mode = None
+        self._last_penalty = None
         self._shell_counts = {}
         self._watched_ammo = None
         self._callback_id = None
@@ -80,7 +92,9 @@ class GunnerHud(object):
         self._factor = 1.0
         self._cooldown.reset()
         self._aim_smoother.reset()
+        self._penalty.reset()
         self._last_accurate_mode = None
+        self._last_penalty = None
         self._cancel_tick()
         self._follow_crosshair()
         self._watch_shots()
@@ -227,11 +241,25 @@ class GunnerHud(object):
         stationary_multiplier, aiming_time = player._PlayerAvatar__dispersionInfo[0], player._PlayerAvatar__dispersionInfo[5]
         gun = player._PlayerAvatar__getDetailedVehicleDescriptor().gun
         best = gun.shotDispersionAngle * stationary_multiplier
+        penalty = self._aim_penalty(player, stationary_multiplier)
         if 'dualAccuracy' not in gun.tags:
-            return aim.aim_status(current, best, aiming_time)
+            return aim.aim_status(current, best, aiming_time, penalty=penalty)
         # On dual accuracy guns the base dispersion is the cooled one; the after-shot value is the hot one.
         factor = gun.shotDispersionAngle / gun.dualAccuracy.afterShotDispersionAngle
-        return aim.aim_status(current, best / factor, aiming_time, self._dual_accuracy(gun, ideal, hot_ideal, factor))
+        return aim.aim_status(current, best / factor, aiming_time, self._dual_accuracy(gun, ideal, hot_ideal, factor),
+                              penalty)
+
+    def _aim_penalty(self, player, multiplier):
+        device_states = getattr(player, 'deviceStates', None) or {}
+        stun_end = getattr(getattr(player, 'vehicle', None), 'stunInfo', 0.0) or 0.0
+        is_penalised = penalised(device_states, stun_end, lambda: BigWorld.serverTime())
+        penalty = self._penalty.update(multiplier, is_penalised, BigWorld.time())
+        shown = round(penalty, 2)
+        if shown != self._last_penalty:
+            self._last_penalty = shown
+            LOG_NOTE('[gunner_hud] aim penalty %.2f (multiplier %.4f, devices %s, stunned %s)'
+                     % (penalty, multiplier, sorted(device_states.items()), stun_end > 0))
+        return penalty if self._settings['aimTimer']['penalty'] else 1.0
 
     def _dual_accuracy(self, gun, ideal, hot_ideal, factor):
         active = aim.accurate_mode_active(ideal, hot_ideal, factor)

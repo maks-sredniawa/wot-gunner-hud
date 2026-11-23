@@ -24,6 +24,7 @@ DEFAULTS = {
     'aresLine': True,
     'aimTimer': {
         'enabled': True,
+        'penalty': True,
         'x': 150,
         'y': 0,
     },
@@ -31,6 +32,7 @@ DEFAULTS = {
         'count': 'D8D8D8',
         'loaded': 'C7FE48',
         'loading': 'FCAF1A',
+        'penalty': 'FF5247',
         'queued': 'D8D8D8',
         'shellTime': 'A8A8A8',
     },

@@ -9,13 +9,14 @@ from .view import dragged_offset, view_offset
 _PREFIX = 'maksforgeGunnerHudAim'
 TRACK = _PREFIX + '1Track'
 LOCKED = _PREFIX + '2Locked'
+PENALTY = _PREFIX + '2Penalty'
 FILL = _PREFIX + '3Fill'
 GAIN = _PREFIX + '4Gain'
 LIMIT = _PREFIX + '5Limit'
 SECONDS = _PREFIX + '6Seconds'
 PERCENT = _PREFIX + '7Percent'
 COOLDOWN = _PREFIX + '8Cooldown'
-STACKING_ORDER = (TRACK, LOCKED, FILL, GAIN, LIMIT, SECONDS, PERCENT, COOLDOWN)
+STACKING_ORDER = (TRACK, LOCKED, PENALTY, FILL, GAIN, LIMIT, SECONDS, PERCENT, COOLDOWN)
 
 BAR_WIDTH = 10
 BAR_HEIGHT = 64
@@ -25,8 +26,11 @@ FULL_ALPHA = (0.9, 0.35)
 GAIN_ALPHA = (0.85, 0.6)
 LOCKED_ALPHA = 0.5
 LIMIT_ALPHA = 0.5
+PENALTY_ALPHA = (0.6, 0.3)
+PENALTY_MIN_HEIGHT = 3
 SECONDS_ALPHA = 0.9
 PERCENT_ALPHA = (0.7, 0.35)
+PENALISED_PERCENT_ALPHA = (0.85, 0.5)
 LIMIT_SIZE = (16, 2)
 LABEL_GAP = 10
 COOLDOWN_X = 26
@@ -76,6 +80,7 @@ class AimBarView(object):
                                                        height=BAR_HEIGHT, **_image('black')))
         self._create(LOCKED, COMPONENT_TYPE.IMAGE, dict(centered, alpha=LOCKED_ALPHA, width=BAR_WIDTH,
                                                         **_image('grey')))
+        self._create(PENALTY, COMPONENT_TYPE.IMAGE, dict(centered, width=BAR_WIDTH, **_image('red')))
         self._create(FILL, COMPONENT_TYPE.IMAGE, dict(centered, width=BAR_WIDTH))
         self._create(GAIN, COMPONENT_TYPE.IMAGE, dict(centered, width=BAR_WIDTH, **_image('cyan')))
         self._create(LIMIT, COMPONENT_TYPE.IMAGE, dict(centered, alpha=LIMIT_ALPHA, width=LIMIT_SIZE[0],
@@ -112,21 +117,30 @@ class AimBarView(object):
         self._update(TRACK, {'visible': True, 'x': cx, 'y': cy, 'alpha': faded(TRACK_ALPHA, display.fade)})
         self._show_fill(display, cx, bottom)
         self._show_limit(display, cx, bottom)
-        self._show_locked(display, cx, cy, bottom)
+        self._show_locked(display, cx, bottom)
+        self._show_penalty(display, cx, cy)
         colors = self._settings['colors']
         font_size = self._settings['fontSize']
         self._show_label(SECONDS, format_seconds(display), colors['loading'], font_size - 1, SECONDS_ALPHA,
                          self._label_position(SECONDS))
-        percent_color = colors['loaded'] if display.normal_reached else colors['loading']
-        self._show_label(PERCENT, format_percent(display), percent_color, font_size - 2,
-                         faded(PERCENT_ALPHA, display.fade), self._label_position(PERCENT))
-        locked_middle = (cy - BAR_HEIGHT / 2 + bottom - BAR_HEIGHT * (display.limit or 0)) / 2
+        self._show_percent(display, colors, font_size)
+        locked_middle = (bottom - BAR_HEIGHT * display.penalty + bottom - BAR_HEIGHT * (display.limit or 0)
+                         * display.penalty) / 2
         self._show_label(COOLDOWN, format_cooldown(display), colors['shellTime'], font_size - 2, 1.0,
                          (cx + COOLDOWN_X, int(round(locked_middle))))
 
+    def _show_percent(self, display, colors, font_size):
+        if display.penalty < 1.0:
+            color, alphas = colors['penalty'], PENALISED_PERCENT_ALPHA
+        else:
+            color, alphas = colors['loaded'] if display.normal_reached else colors['loading'], PERCENT_ALPHA
+        self._show_label(PERCENT, format_percent(display), color, font_size - 2, faded(alphas, display.fade),
+                         self._label_position(PERCENT))
+
     def _show_fill(self, display, cx, bottom):
-        normal = int(round(BAR_HEIGHT * min(display.fill, display.limit or 1.0)))
-        gain = int(round(BAR_HEIGHT * display.fill)) - normal
+        scale = BAR_HEIGHT * display.penalty
+        normal = int(round(scale * min(display.fill, display.limit or 1.0)))
+        gain = int(round(scale * display.fill)) - normal
         fill_look = dict(_image('green'), alpha=faded(FULL_ALPHA, display.fade)) if display.normal_reached else \
             dict(_image('amber'), alpha=AIMING_ALPHA)
         self._show_segment(FILL, normal, cx, bottom, fill_look)
@@ -142,15 +156,24 @@ class AimBarView(object):
         if display.limit is None:
             self._update(LIMIT, {'visible': False})
             return
-        self._update(LIMIT, {'visible': True, 'x': cx, 'y': int(round(bottom - BAR_HEIGHT * display.limit))})
+        self._update(LIMIT, {'visible': True, 'x': cx,
+                             'y': int(round(bottom - BAR_HEIGHT * display.limit * display.penalty))})
 
-    def _show_locked(self, display, cx, cy, bottom):
-        height = int(round(BAR_HEIGHT * (1 - (display.limit or 1.0))))
+    def _show_locked(self, display, cx, bottom):
+        height = int(round(BAR_HEIGHT * display.penalty * (1 - (display.limit or 1.0))))
         if not display.locked or height <= 0:
             self._update(LOCKED, {'visible': False})
             return
-        top = cy - BAR_HEIGHT / 2
+        top = bottom - BAR_HEIGHT * display.penalty
         self._update(LOCKED, {'visible': True, 'x': cx, 'y': int(round(top + height / 2)), 'height': height})
+
+    def _show_penalty(self, display, cx, cy):
+        if display.penalty >= 1.0:
+            self._update(PENALTY, {'visible': False})
+            return
+        height = max(PENALTY_MIN_HEIGHT, int(round(BAR_HEIGHT * (1 - display.penalty))))
+        self._update(PENALTY, {'visible': True, 'x': cx, 'y': int(round(cy - BAR_HEIGHT / 2 + height / 2)),
+                               'height': height, 'alpha': faded(PENALTY_ALPHA, display.fade)})
 
     def _show_label(self, alias, text, color, size, alpha, position):
         if text is None:

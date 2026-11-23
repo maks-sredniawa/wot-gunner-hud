@@ -833,6 +833,74 @@ class AimTimerTest(_StubbedGameTest):
         self.tick(at=112.5)
         self.assertIn('>3.0 s<', self.part('Cooldown')['text'])
 
+    def damage(self, multiplier, **device_states):
+        self.player.deviceStates = device_states
+        self.player._PlayerAvatar__dispersionInfo[0] = multiplier
+
+    def test_damaged_gun_reads_the_real_percent_in_red_under_a_red_cap(self):
+        self.tick([0.2, 0.2, 0.2, 0.2], at=100.1)
+        self.assertFalse(self.visible('Penalty'))
+        self.damage(1.25, gun='critical')
+        self.tick([0.25, 0.25, 0.25, 0.25], at=100.2)
+        self.assertIn("color='#FF5247'>80%<", self.part('Percent')['text'])
+        self.assertEqual(self.part('Percent')['alpha'], 0.85)
+        self.assertTrue(self.visible('Penalty'))
+        self.assertIn('red.png', self.part('Penalty')['image'])
+        self.assertEqual((self.part('Penalty')['height'], self.part('Penalty')['y']), (13, int(round(-32 + 6.5))))
+        self.assertEqual(self.part('Penalty')['alpha'], 0.6)
+        self.assertIn('green.png', self.part('Fill')['image'])
+        self.assertEqual(self.part('Fill')['height'], 51)
+        self.assertFalse(self.visible('Seconds'))
+        self.tick(at=101.0)
+        self.assertEqual((self.part('Penalty')['alpha'], self.part('Percent')['alpha']), (0.3, 0.5))
+        self.assertIn('>80%<', self.part('Percent')['text'])
+
+    def test_repaired_gun_goes_back_to_green_100_percent(self):
+        self.damage(1.25, gun='destroyed')
+        self.tick([0.25, 0.25, 0.25, 0.25], at=100.1)
+        self.assertIn('>80%<', self.part('Percent')['text'])
+        self.damage(1.0)
+        self.tick([0.2, 0.2, 0.2, 0.2], at=100.2)
+        self.assertIn("color='#C7FE48'>100%<", self.part('Percent')['text'])
+        self.assertFalse(self.visible('Penalty'))
+
+    def test_injured_gunner_and_stun_count_but_a_damaged_engine_alone_does_not(self):
+        sys.modules['BigWorld'].serverTime = lambda: 500.0
+        self.damage(1.25, engine='critical')
+        self.tick([0.25, 0.25, 0.25, 0.25], at=100.1)
+        self.assertIn("color='#C7FE48'>100%<", self.part('Percent')['text'])
+        self.player._PlayerAvatar__dispersionInfo[0] = 1.0
+        self.player.deviceStates = {}
+        self.tick([0.2, 0.2, 0.2, 0.2], at=100.2)
+        self.damage(1.6, gunner1='destroyed')
+        self.tick([0.32, 0.32, 0.32, 0.32], at=100.3)
+        self.assertIn('>63%<', self.part('Percent')['text'])
+        self.damage(1.6)
+        self.player.vehicle = _Obj(stunInfo=510.0)
+        self.tick(at=100.4)
+        self.assertIn('>63%<', self.part('Percent')['text'])
+
+    def test_aim_penalty_off_keeps_the_old_100_percent(self):
+        self.mod._timer.settings['aimTimer']['penalty'] = False
+        self.damage(1.25, gun='critical')
+        self.tick([0.25, 0.25, 0.25, 0.25], at=100.1)
+        self.assertIn("color='#C7FE48'>100%<", self.part('Percent')['text'])
+        self.assertFalse(self.visible('Penalty'))
+
+    def test_type_71_cooling_zone_and_tick_shrink_under_the_red_cap(self):
+        type_71_gun = _Obj(shotDispersionAngle=0.24, tags=frozenset(['dualAccuracy']),
+                           dualAccuracy=_Obj(afterShotDispersionAngle=0.4, coolingDelay=4.0))
+        self.player._PlayerAvatar__getDetailedVehicleDescriptor = lambda: _Obj(gun=type_71_gun)
+        self.tick([0.24, 0.24, 0.24, 0.4], at=90.0)
+        self.damage(1.25, gun='critical')
+        self.tick([0.5, 0.5, 0.5, 0.5], at=100.0)
+        self.tick(at=101.0)
+        self.assertEqual(self.part('Penalty')['height'], 13)
+        self.assertEqual(self.part('Limit')['y'], int(round(32 - 64 * 0.6 * 0.8)))
+        self.assertEqual(self.part('Locked')['height'], int(round(64 * 0.8 * 0.4)))
+        self.assertEqual(self.part('Locked')['y'], int(round(32 - 64 * 0.8 + 64 * 0.8 * 0.4 / 2)))
+        self.assertIn("color='#FF5247'>80%<", self.part('Percent')['text'])
+
     def test_stops_watching_shots_after_the_battle(self):
         self.events.onAvatarBecomeNonPlayer()
         self.assertEqual(self.ammo.onShellsUpdated.handlers, [])
@@ -953,12 +1021,18 @@ class SettingsWindowTest(_StubbedGameTest):
         self.assertEqual(template['modDisplayName'], 'Gunner HUD')
         controls = dict((c['varName'], c) for column in ('column1', 'column2') for c in template[column]
                         if 'varName' in c)
-        self.assertEqual(sorted(controls), ['aimTimer', 'aresLine', 'autoreloaderLine', 'fontSize', 'hideWhenFull',
-                                            'magazineLine', 'reloadChatLine'])
+        self.assertEqual(sorted(controls), ['aimPenalty', 'aimTimer', 'aresLine', 'autoreloaderLine', 'fontSize',
+                                            'hideWhenFull', 'magazineLine', 'reloadChatLine'])
         self.assertEqual((controls['fontSize']['minimum'], controls['fontSize']['maximum']), (10, 24))
         self.assertEqual(self.api.settings[LINKAGE], {
-            'enabled': True, 'aimTimer': True, 'autoreloaderLine': True, 'magazineLine': True, 'aresLine': True,
-            'reloadChatLine': True, 'hideWhenFull': False, 'fontSize': 14})
+            'enabled': True, 'aimTimer': True, 'aimPenalty': True, 'autoreloaderLine': True, 'magazineLine': True,
+            'aresLine': True, 'reloadChatLine': True, 'hideWhenFull': False, 'fontSize': 14})
+
+    def test_aim_penalty_switch_is_saved_under_the_aim_timer(self):
+        self.start_game()
+        self.change(aimPenalty=False)
+        self.assertFalse(self.mod._timer.settings['aimTimer']['penalty'])
+        self.assertFalse(self.saved()['aimTimer']['penalty'])
 
     def test_a_change_on_the_page_applies_at_once_and_is_saved_to_config_json(self):
         self.start_game()
