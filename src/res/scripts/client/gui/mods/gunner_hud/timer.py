@@ -16,7 +16,7 @@ _CREW_ROLES = ('commander', 'gunner', 'driver', 'radioman', 'loader')
 
 
 def penalised(device_states, stun_end, server_time):
-    # Any injured crew member counts: the commander's bonus and Brothers in Arms reach the gunner too.
+    # See README, "Damaged gun, injured crew, stun".
     for name in device_states:
         if name == _GUN or name.startswith(_CREW_ROLES):
             return True

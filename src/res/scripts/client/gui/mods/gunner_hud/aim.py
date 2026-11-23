@@ -80,8 +80,7 @@ def aim_status(current, stationary_best, aiming_time, dual=None, penalty=1.0):
 
 
 class PenaltyTracker(object):
-    # The server sends one dispersion multiplier with every modifier already in it, so the healthy one is the last
-    # multiplier seen while no damage, injury or stun was on.
+    # See README, "Damaged gun, injured crew, stun".
 
     def __init__(self):
         self.reset()

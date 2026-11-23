@@ -896,10 +896,19 @@ class AimTimerTest(_StubbedGameTest):
         self.tick([0.5, 0.5, 0.5, 0.5], at=100.0)
         self.tick(at=101.0)
         self.assertEqual(self.part('Penalty')['height'], 13)
-        self.assertEqual(self.part('Limit')['y'], int(round(32 - 64 * 0.6 * 0.8)))
-        self.assertEqual(self.part('Locked')['height'], int(round(64 * 0.8 * 0.4)))
-        self.assertEqual(self.part('Locked')['y'], int(round(32 - 64 * 0.8 + 64 * 0.8 * 0.4 / 2)))
+        self.assertEqual(self.part('Limit')['y'], int(round(32 - 51 * 0.6)))
+        self.assertEqual(self.part('Locked')['height'], int(round(51 * 0.4)))
+        self.assertEqual(self.part('Locked')['y'], int(round(32 - 51 + 51 * 0.4 / 2)))
         self.assertIn("color='#FF5247'>80%<", self.part('Percent')['text'])
+
+    def test_a_small_penalty_keeps_its_whole_red_cap_above_a_full_fill(self):
+        self.tick([0.2, 0.2, 0.2, 0.2], at=100.1)
+        self.damage(1 / 0.98, gunner1='critical')
+        self.tick([0.2 / 0.98] * 4, at=100.2)
+        self.assertIn('>98%<', self.part('Percent')['text'])
+        penalty, fill = self.part('Penalty'), self.part('Fill')
+        self.assertEqual((penalty['height'], fill['height']), (3, 61))
+        self.assertLessEqual(penalty['y'] + penalty['height'] / 2.0, fill['y'] - fill['height'] / 2.0)
 
     def test_stops_watching_shots_after_the_battle(self):
         self.events.onAvatarBecomeNonPlayer()

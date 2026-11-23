@@ -66,6 +66,12 @@ def faded(alphas, fade):
     return round(start + (end - start) * fade, 3)
 
 
+def penalty_height(display):
+    if display.penalty >= 1.0:
+        return 0
+    return max(PENALTY_MIN_HEIGHT, int(round(BAR_HEIGHT * (1 - display.penalty))))
+
+
 class AimBarView(object):
 
     def __init__(self, settings, on_moved):
@@ -114,18 +120,19 @@ class AimBarView(object):
             return
         cx, cy = self._center()
         bottom = cy + BAR_HEIGHT / 2
+        cap = penalty_height(display)
+        scale = BAR_HEIGHT - cap
         self._update(TRACK, {'visible': True, 'x': cx, 'y': cy, 'alpha': faded(TRACK_ALPHA, display.fade)})
-        self._show_fill(display, cx, bottom)
-        self._show_limit(display, cx, bottom)
-        self._show_locked(display, cx, bottom)
-        self._show_penalty(display, cx, cy)
+        self._show_fill(display, scale, cx, bottom)
+        self._show_limit(display, scale, cx, bottom)
+        self._show_locked(display, scale, cx, bottom)
+        self._show_penalty(display, cap, cx, cy)
         colors = self._settings['colors']
         font_size = self._settings['fontSize']
         self._show_label(SECONDS, format_seconds(display), colors['loading'], font_size - 1, SECONDS_ALPHA,
                          self._label_position(SECONDS))
         self._show_percent(display, colors, font_size)
-        locked_middle = (bottom - BAR_HEIGHT * display.penalty + bottom - BAR_HEIGHT * (display.limit or 0)
-                         * display.penalty) / 2
+        locked_middle = bottom - scale * (1 + (display.limit or 0)) / 2
         self._show_label(COOLDOWN, format_cooldown(display), colors['shellTime'], font_size - 2, 1.0,
                          (cx + COOLDOWN_X, int(round(locked_middle))))
 
@@ -137,8 +144,7 @@ class AimBarView(object):
         self._show_label(PERCENT, format_percent(display), color, font_size - 2, faded(alphas, display.fade),
                          self._label_position(PERCENT))
 
-    def _show_fill(self, display, cx, bottom):
-        scale = BAR_HEIGHT * display.penalty
+    def _show_fill(self, display, scale, cx, bottom):
         normal = int(round(scale * min(display.fill, display.limit or 1.0)))
         gain = int(round(scale * display.fill)) - normal
         fill_look = dict(_image('green'), alpha=faded(FULL_ALPHA, display.fade)) if display.normal_reached else \
@@ -152,26 +158,25 @@ class AimBarView(object):
             return
         self._update(alias, dict(look, visible=True, x=cx, y=int(round(bottom - height / 2)), height=height))
 
-    def _show_limit(self, display, cx, bottom):
+    def _show_limit(self, display, scale, cx, bottom):
         if display.limit is None:
             self._update(LIMIT, {'visible': False})
             return
         self._update(LIMIT, {'visible': True, 'x': cx,
-                             'y': int(round(bottom - BAR_HEIGHT * display.limit * display.penalty))})
+                             'y': int(round(bottom - scale * display.limit))})
 
-    def _show_locked(self, display, cx, bottom):
-        height = int(round(BAR_HEIGHT * display.penalty * (1 - (display.limit or 1.0))))
+    def _show_locked(self, display, scale, cx, bottom):
+        height = int(round(scale * (1 - (display.limit or 1.0))))
         if not display.locked or height <= 0:
             self._update(LOCKED, {'visible': False})
             return
-        top = bottom - BAR_HEIGHT * display.penalty
+        top = bottom - scale
         self._update(LOCKED, {'visible': True, 'x': cx, 'y': int(round(top + height / 2)), 'height': height})
 
-    def _show_penalty(self, display, cx, cy):
-        if display.penalty >= 1.0:
+    def _show_penalty(self, display, height, cx, cy):
+        if height <= 0:
             self._update(PENALTY, {'visible': False})
             return
-        height = max(PENALTY_MIN_HEIGHT, int(round(BAR_HEIGHT * (1 - display.penalty))))
         self._update(PENALTY, {'visible': True, 'x': cx, 'y': int(round(cy - BAR_HEIGHT / 2 + height / 2)),
                                'height': height, 'alpha': faded(PENALTY_ALPHA, display.fade)})
 
