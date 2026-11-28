@@ -6,9 +6,9 @@ from debug_utils import LOG_CURRENT_EXCEPTION, LOG_NOTE
 from helpers import dependency
 from skeletons.gui.battle_session import IBattleSessionProvider
 
-from . import aim, config, gun_cooling, schedule
+from . import aim, config, gun_cooling, schedule, stance_charge
 from .aim_view import AimBarView
-from .view import PanelView, format_cooling, format_magazine, format_segments
+from .view import CHARGE_ALIASES, PanelView, format_cooling, format_magazine, format_segments
 
 TICK_SECONDS = 0.1
 _GUN = 'gun'
@@ -30,6 +30,9 @@ class GunnerHud(object):
         self._settings = config.load()
         self._view = None
         self._aim_view = None
+        self._charge_views = {}
+        self._charge_countdowns = dict((stance, stance_charge.ChargeCountdown()) for stance in CHARGE_ALIASES)
+        self._charge_log = None
         self._cooldown = aim.CooldownTracker()
         self._aim_smoother = aim.AimSmoother()
         self._penalty = aim.PenaltyTracker()
@@ -46,6 +49,7 @@ class GunnerHud(object):
             return
         self._view = PanelView(self._settings, self._on_moved)
         self._sync_aim_view()
+        self._sync_charge_views()
         g_playerEvents.onAvatarReady += self._on_avatar_ready
         g_playerEvents.onAvatarBecomeNonPlayer += self._on_avatar_left
 
@@ -55,6 +59,7 @@ class GunnerHud(object):
             return
         self.start()
         self._sync_aim_view()
+        self._sync_charge_views()
 
     def _sync_aim_view(self):
         wanted = self._settings['aimTimer']['enabled']
@@ -66,6 +71,22 @@ class GunnerHud(object):
         elif not wanted and self._aim_view is not None:
             self._aim_view.destroy()
             self._aim_view = None
+
+    def _sync_charge_views(self):
+        charge_settings = self._settings['abilityCharge']
+        if charge_settings['enabled'] and not self._charge_views:
+            for stance, alias in CHARGE_ALIASES.items():
+                self._charge_views[stance] = PanelView(self._settings, self._on_moved, alias, charge_settings[stance])
+                self._charge_countdowns[stance].reset()
+            if self._crosshair is not None:
+                self._on_crosshair_changed()
+        elif not charge_settings['enabled'] and self._charge_views:
+            self._destroy_charge_views()
+
+    def _destroy_charge_views(self):
+        for view in self._charge_views.values():
+            view.destroy()
+        self._charge_views = {}
 
     def stop(self):
         if self._view is None:
@@ -80,6 +101,7 @@ class GunnerHud(object):
         if self._aim_view is not None:
             self._aim_view.destroy()
             self._aim_view = None
+        self._destroy_charge_views()
 
     @property
     def settings(self):
@@ -93,6 +115,9 @@ class GunnerHud(object):
         self._cooldown.reset()
         self._aim_smoother.reset()
         self._penalty.reset()
+        for countdown in self._charge_countdowns.values():
+            countdown.reset()
+        self._charge_log = None
         self._last_accurate_mode = None
         self._last_penalty = None
         self._cancel_tick()
@@ -108,6 +133,8 @@ class GunnerHud(object):
             self._view.hide()
         if self._aim_view is not None:
             self._aim_view.hide()
+        for view in self._charge_views.values():
+            view.hide()
 
     def _cancel_tick(self):
         if self._callback_id is not None:
@@ -128,6 +155,14 @@ class GunnerHud(object):
                 LOG_CURRENT_EXCEPTION()
                 self._aim_smoother.reset()
                 self._aim_view.hide()
+        if self._charge_views:
+            try:
+                self._show_charges()
+            except Exception:
+                LOG_CURRENT_EXCEPTION()
+                for stance, view in self._charge_views.items():
+                    self._charge_countdowns[stance].reset()
+                    view.hide()
 
     def _watch_shots(self):
         self._unwatch_shots()
@@ -177,6 +212,8 @@ class GunnerHud(object):
             self._view.set_anchor(x, y, view_id)
             if self._aim_view is not None:
                 self._aim_view.set_anchor(x, y, view_id)
+            for view in self._charge_views.values():
+                view.set_anchor(x, y, view_id)
         except Exception:
             LOG_CURRENT_EXCEPTION()
 
@@ -220,6 +257,38 @@ class GunnerHud(object):
         if status is None or (self._settings['hideWhenFull'] and status.state == gun_cooling.COLD):
             return None
         return format_cooling(status, self._settings)
+
+    def _show_charges(self):
+        charges = stance_charge.read_charges()
+        now = BigWorld.time()
+        self._log_charge(next((charge for charge in charges.values() if charge and charge.active), None), now)
+        colors = self._settings['colors']
+        for stance, view in self._charge_views.items():
+            charge = charges.get(stance)
+            seconds = self._charge_countdowns[stance].update(charge, now)
+            if seconds is None:
+                view.hide()
+                continue
+            color = colors['loading'] if charge.active else colors['shellTime']
+            view.show([(stance_charge.format_seconds(seconds), color)])
+
+    def _log_charge(self, charge, now):
+        if charge is None or charge.energy >= charge.cost:
+            self._charge_log = None
+            return
+        last = self._charge_log
+        if last is not None and charge.energy < last[1]:
+            last = None
+        key = (charge.stance, charge.flags)
+        if last is not None and last[0] == key:
+            return
+        measured = None
+        if last is not None and last[0][0] == charge.stance and now > last[2]:
+            measured = (charge.energy - last[1]) / (now - last[2])
+        LOG_NOTE('[gunner_hud] %s stance, flags %d, energy %.1f/%.0f, predicted %.2f/s, measured since last %s'
+                 % (charge.stance, charge.flags, charge.energy, charge.cost, charge.rate,
+                    'n/a' if measured is None else '%.2f/s' % measured))
+        self._charge_log = (key, charge.energy, now)
 
     def _aim_display(self):
         status = self._aim_status()

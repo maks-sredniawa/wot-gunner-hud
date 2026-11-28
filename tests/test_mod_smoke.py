@@ -135,11 +135,14 @@ def _install_stubs(guiflash, ammo, crosshair, player_events, callbacks, mechanic
     module('BigWorld', callback=lambda delay, fn: callbacks.append(fn) or len(callbacks),
            cancelCallback=lambda cid: None)
     module('PlayerEvents', g_playerEvents=player_events)
-    module('constants', TEMPERATURE_GUN_STATE=_Obj(IDLE=0, HEATING=1, COOLING=2, COOLING_DELAY=3))
+    module('constants', TEMPERATURE_GUN_STATE=_Obj(IDLE=0, HEATING=1, COOLING=2, COOLING_DELAY=3),
+           STANCE_DANCE_STATE=_Obj(STANCE_MASK=1, STANCE_FIGHT=0, STANCE_TURBO=1, SWITCHING_STANCE=2,
+                                   ACTIVE_ABILITY_FIGHT=4, ACTIVE_ABILITY_TURBO=8, ACTIVE_ABILITY_MASK=12,
+                                   ENERGY_TIMER_ON=16, ENERGY_SPD_BOOSTED=32, ENGINE_DEAD=64))
     module('items').__path__ = []
     module('items.vehicle_mechanics_types',
            VehicleMechanicKeys=_Obj(OVERHEAT_GUN='overheat', TEMPERATURE_GUN='temperature',
-                                                    DUAL_ACCURACY='dualAccuracy'))
+                                                    DUAL_ACCURACY='dualAccuracy', STANCE_DANCE='stanceDance'))
     module('vehicles').__path__ = []
     module('vehicles.mechanics').__path__ = []
     module('vehicles.mechanics.mechanic_helpers', getPlayerVehicleMechanicComponent=mechanics.get,
@@ -697,6 +700,115 @@ class GunCoolingTest(_StubbedGameTest):
         self.assertEqual(chat_ctrl.sent, ['game reload command'])
 
 
+class StanceChargeTest(_StubbedGameTest):
+    TURBO, SWITCHING, ACTIVE_FIGHT, ACTIVE_TURBO, TIMER_ON, BOOSTED = 1, 2, 4, 8, 16, 32
+
+    def setUp(self):
+        super(StanceChargeTest, self).setUp()
+        self.ammo.gun.hasAutoReload = lambda: False
+        self.crosshair.position = (1280, 720)
+        self.params = _Obj(gainEnergyTime=1.0, gainFightEnergyPoints=0.6, gainTurboEnergyPoints=0.6,
+                           gainTurboEnergyBonusPoints=4.0, activeFightCost=100.0, activeTurboCost=100.0)
+        self.mod = importlib.import_module('gui.mods.mod_gunner_hud')
+        self.mod.init()
+        self.addCleanup(self.mod.fini)
+        self.events.onAvatarReady()
+
+    def label(self, stance='fight'):
+        return self.guiflash.components['maksforgeGunnerHudCharge' + stance.capitalize()]
+
+    def show(self, flags, fight=0.0, turbo=0.0, at=None):
+        state = _Obj(state=flags, params=self.params, energyFight=fight, energyTurbo=turbo)
+        self.mechanics['stanceDance'] = _Obj(getMechanicState=lambda: state)
+        if at is not None:
+            self.clock[0] = at
+        self.callbacks[-1]()
+        return self.label('fight'), self.label('turbo')
+
+    def test_tank_without_stances_shows_nothing(self):
+        self.callbacks[-1]()
+        self.assertFalse(self.label('fight')['visible'])
+        self.assertFalse(self.label('turbo')['visible'])
+
+    def test_fight_stance_is_amber_on_the_left_and_turbo_grey_on_the_right(self):
+        fight, turbo = self.show(self.TIMER_ON, fight=40.0, turbo=70.0)
+        self.assertIn("<font color='#FCAF1A'>100 s</font>", fight['text'])
+        self.assertIn("<font color='#A8A8A8'>50 s</font>", turbo['text'])
+        self.assertEqual((fight['x'], fight['y']), (-210, 71))
+        self.assertEqual((turbo['x'], turbo['y']), (210, 71))
+
+    def test_turbo_stance_adds_the_speed_bonus_while_boosted(self):
+        fight, turbo = self.show(self.TURBO | self.TIMER_ON, fight=70.0, turbo=44.0)
+        self.assertIn("<font color='#FCAF1A'>94 s</font>", turbo['text'])
+        self.assertIn("<font color='#A8A8A8'>50 s</font>", fight['text'])
+        self.assertIn('>13 s<', self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, fight=70.0, turbo=44.0)[1]['text'])
+
+    def test_grey_stance_ignores_the_speed_bonus_it_would_not_get(self):
+        turbo = self.show(self.TIMER_ON | self.BOOSTED, turbo=44.0)[1]
+        self.assertIn('>94 s<', turbo['text'])
+
+    def test_counts_down_between_server_updates_and_drops_on_a_hit(self):
+        self.show(self.TIMER_ON, fight=40.0, at=100.0)
+        self.assertIn('>98 s<', self.show(self.TIMER_ON, fight=40.0, at=102.5)[0]['text'])
+        self.assertIn('>75 s<', self.show(self.TIMER_ON, fight=55.0, at=102.6)[0]['text'])
+
+    def test_grey_stance_holds_its_time_while_its_energy_is_unchanged(self):
+        for at in (100.0, 110.0, 160.0):
+            self.assertIn('>50 s<', self.show(self.TIMER_ON, fight=40.0, turbo=70.0, at=at)[1]['text'])
+
+    def logged_rates(self):
+        timer_module = sys.modules['gui.mods.gunner_hud.timer']
+        notes = []
+        original = timer_module.LOG_NOTE
+        timer_module.LOG_NOTE = notes.append
+        self.addCleanup(setattr, timer_module, 'LOG_NOTE', original)
+        return notes
+
+    def test_measured_rate_starts_again_after_the_ability_is_spent(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON | self.ACTIVE_TURBO, turbo=40.0, at=101.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=0.0, at=102.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
+        self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
+
+    def test_measured_rate_starts_again_after_waiting_at_full(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=100.0, at=150.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=100.0, at=200.0)
+        self.assertTrue(notes[-1].endswith('measured since last n/a'), notes[-1])
+
+    def test_measured_rate_starts_again_when_energy_drops(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=0.0, at=102.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
+        self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
+
+    def test_hides_a_ready_or_running_ability_and_both_while_switching(self):
+        fight, turbo = self.show(self.TIMER_ON, fight=100.0, turbo=40.0)
+        self.assertFalse(fight['visible'])
+        self.assertTrue(turbo['visible'])
+        fight, turbo = self.show(self.TIMER_ON | self.ACTIVE_FIGHT, fight=0.0, turbo=40.0)
+        self.assertFalse(fight['visible'])
+        self.assertTrue(turbo['visible'])
+        self.assertFalse(any(label['visible'] for label in self.show(self.TIMER_ON | self.SWITCHING, 40.0, 40.0)))
+        self.assertFalse(self.show(0, fight=40.0)[0]['visible'])
+
+    def test_setting_off_removes_both_labels(self):
+        self.mod._timer.settings['abilityCharge']['enabled'] = False
+        self.mod._timer.apply_settings()
+        self.assertFalse([alias for alias in self.guiflash.components if 'Charge' in alias])
+
+    def test_dragging_saves_each_labels_own_offset(self):
+        self.show(self.TIMER_ON, fight=40.0)
+        self.label('turbo').update(x=300, y=80)
+        sys.modules['gui.mods.gambiter.flash'].COMPONENT_EVENT.UPDATED('maksforgeGunnerHudChargeTurbo', {'x': 300, 'y': 80})
+        charge = self.mod._timer.settings['abilityCharge']
+        self.assertEqual(charge['turbo'], {'x': 300, 'y': 80})
+        self.assertEqual(charge['fight'], {'x': -210, 'y': 71})
+
 
 class AimTimerTest(_StubbedGameTest):
 
@@ -1030,12 +1142,18 @@ class SettingsWindowTest(_StubbedGameTest):
         self.assertEqual(template['modDisplayName'], 'Gunner HUD')
         controls = dict((c['varName'], c) for column in ('column1', 'column2') for c in template[column]
                         if 'varName' in c)
-        self.assertEqual(sorted(controls), ['aimPenalty', 'aimTimer', 'aresLine', 'autoreloaderLine', 'fontSize',
+        self.assertEqual(sorted(controls), ['abilityCharge', 'aimPenalty', 'aimTimer', 'aresLine', 'autoreloaderLine', 'fontSize',
                                             'hideWhenFull', 'magazineLine', 'reloadChatLine'])
         self.assertEqual((controls['fontSize']['minimum'], controls['fontSize']['maximum']), (10, 24))
         self.assertEqual(self.api.settings[LINKAGE], {
-            'enabled': True, 'aimTimer': True, 'aimPenalty': True, 'autoreloaderLine': True, 'magazineLine': True,
+            'enabled': True, 'aimTimer': True, 'aimPenalty': True, 'abilityCharge': True, 'autoreloaderLine': True, 'magazineLine': True,
             'aresLine': True, 'reloadChatLine': True, 'hideWhenFull': False, 'fontSize': 14})
+
+    def test_ability_charge_switch_is_saved_under_its_own_key(self):
+        self.start_game()
+        self.change(abilityCharge=False)
+        self.assertFalse(self.mod._timer.settings['abilityCharge']['enabled'])
+        self.assertFalse(self.saved()['abilityCharge']['enabled'])
 
     def test_aim_penalty_switch_is_saved_under_the_aim_timer(self):
         self.start_game()

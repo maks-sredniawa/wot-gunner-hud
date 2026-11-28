@@ -28,6 +28,11 @@ DEFAULTS = {
         'x': 150,
         'y': 0,
     },
+    'abilityCharge': {
+        'enabled': True,
+        'fight': {'x': -210, 'y': 71},
+        'turbo': {'x': 210, 'y': 71},
+    },
     'colors': {
         'count': 'D8D8D8',
         'loaded': 'C7FE48',

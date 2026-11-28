@@ -6,6 +6,7 @@ A World of Tanks mod that shows what your gun is doing next to the crosshair:
 - The shells left and their potential damage on every magazine tank.
 - How long an Ares gun needs to cool down and the damage left before it locks.
 - An aim timer on every tank, which also shows the dual accuracy cooldown of the Type 71 line and, in red, how much a damaged gun, an injured crew member or a stun costs your aim.
+- How long each stance's ability needs to charge on tanks with Fight and Turbo stances, such as the CS-67 Szakal.
 
 Until 0.6.0 it was called Autoloader Shell Timer.
 
@@ -73,6 +74,22 @@ On guns with dual accuracy, the circle gets much smaller once the gun has cooled
 
 The game doesn't tell the client how long the cooldown is after crew skills, so the first countdown of a battle uses the gun's base delay. After one full cycle the mod counts with the delay it measured. The countdown starts when the server switches the accurate mode off, so ping shifts it slightly. It's an estimate: firing again restarts it.
 
+## Stance ability charge (CS-67 Szakal)
+
+Tanks with Fight and Turbo stances charge a separate energy gauge for each stance's ability. Beside each gauge, at its middle, the mod shows the estimated seconds until that ability can be used: the Fight (reload) ability's time left of the left gauge, the Turbo (speed) ability's time right of the right gauge.
+
+- **Amber** is the stance you're in, counting at the rate you're charging now.
+- **Grey** is the other stance: how long it would take at its passive rate once you switch to it.
+
+- **Fight stance** charges slowly on its own (0.6 energy a second on the Szakal, so a full gauge takes about 2 min 47 s) and gains a chunk with every hit you land. A hit makes the countdown drop at once.
+- **Turbo stance** charges at the same slow pace, much faster while you drive above the speed the game marks on the turbo gauge (40 km/h on the Szakal). Speeding up or slowing down changes the countdown straight away.
+- Switching stance swaps the colours.
+- Each time hides once its ability is ready or while it's running (the game shows its own timer). Both hide while the stance is switching and while the engine is destroyed.
+
+The rates come from your tank as the game sets it up, so the Szakal's field modifications that speed up passive Fight or Turbo gain (+25% each) and any crew or equipment bonuses are already included.
+
+The seconds assume you keep doing what you're doing now: they count the passive gain and the speed bonus that is on at this moment, never hits you haven't landed yet. Turn it off with `abilityCharge.enabled` or on the settings page. Drag either one with Ctrl like the other parts if it sits wrong at your resolution.
+
 ## Reload quick command
 
 In an autoreloader, the reload quick command (its own key, or Z → "I'm reloading") sends one team chat line with the whole magazine instead of the game's line, which only knows about the next shell:
@@ -99,7 +116,7 @@ Allies don't get the game's reload icon over your tank or the minimap animation 
 
 ## In-game settings
 
-With [ModsSettingsAPI](https://github.com/IzeBerg/modssettingsapi) (`izeberg.modssettingsapi_*.wotmod`) installed, the mod gets a **Gunner HUD** page in the mods settings window, opened from the mods list button in the garage or on the login screen. ModsSettingsAPI needs ModsList API (`me.poliroid.modslistapi_*.wotmod`); modpacks that include one usually include both. It switches the whole mod, the aim timer, its red aim penalty, each line, the reload quick command line and Hide when full, and sets the text size (10 to 24).
+With [ModsSettingsAPI](https://github.com/IzeBerg/modssettingsapi) (`izeberg.modssettingsapi_*.wotmod`) installed, the mod gets a **Gunner HUD** page in the mods settings window, opened from the mods list button in the garage or on the login screen. ModsSettingsAPI needs ModsList API (`me.poliroid.modslistapi_*.wotmod`); modpacks that include one usually include both. It switches the whole mod, the aim timer, its red aim penalty, the stance ability charge times, each line, the reload quick command line and Hide when full, and sets the text size (10 to 24).
 
 The page reads and writes `config.json`, so the file stays the one source of truth: a change on the page is saved there at once, and a value you edit in the file shows on the page at the next game start. Every change applies without a restart and shows from your next battle. Without ModsSettingsAPI the mod runs from `config.json` alone, as before.
 
@@ -118,9 +135,10 @@ The game writes `mods/configs/gunner_hud/config.json` the first time it starts w
 | `magazineLine` | `true` | Show the magazine line on regular autoloaders |
 | `aresLine` | `true` | Show the cooldown and damage line on Ares tanks |
 | `aimTimer` | | `enabled` (`true`) shows the aim timer. `penalty` (`true`) shows a damaged gun's, an injured crew member's or a stun's cost to your aim in red. `x`, `y` (`150`, `0`) are its offset from the crosshair. Like the panel, it uses this spot in sniper and artillery view too until you drag it there, which adds a `sniper` or `strategic` key with its own `x`, `y`. |
+| `abilityCharge` | | `enabled` (`true`) shows the stance ability charge times. `fight` and `turbo` each hold their time's `x`, `y` offset from the crosshair (`-210`, `71` and `210`, `71`), with their own `sniper` or `strategic` key once you drag them in those views. |
 | `colors` | | Hex colours for the count, a full magazine, the loading shell, the queued shells, the per-shell times, and the aim timer's red penalty percentage (`penalty`). The Ares line and the aim timer's text reuse them. The bar's own colours are built in. |
 
-To move the panel or the aim timer, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. Sniper and artillery view use the same spot as arcade view; drag the panel or the aim timer while in one of those views to give that view its own position.
+To move the panel, the aim timer or the stance ability charge times, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. Sniper and artillery view use the same spot as arcade view; drag any of them while in one of those views to give that view its own position.
 
 ## Build
 
