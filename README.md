@@ -138,7 +138,7 @@ The game writes `mods/configs/gunner_hud/config.json` the first time it starts w
 | `abilityCharge` | | `enabled` (`true`) shows the stance ability charge times. `fight` and `turbo` each hold their time's `x`, `y` offset from the crosshair (`-210`, `71` and `210`, `71`), with their own `sniper` or `strategic` key once you drag them in those views. |
 | `colors` | | Hex colours for the count, a full magazine, the loading shell, the queued shells, the per-shell times, and the aim timer's red penalty percentage (`penalty`). The Ares line and the aim timer's text reuse them. The bar's own colours are built in. |
 
-To move the panel, the aim timer or the stance ability charge time, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. Sniper and artillery view use the same spot as arcade view; drag any of them while in one of those views to give that view its own position.
+To move the panel, the aim timer or the stance ability charge times, hold Ctrl to show the cursor and drag it (the aim timer by its bar, seconds or percentage). The new position is saved. Sniper and artillery view use the same spot as arcade view; drag any of them while in one of those views to give that view its own position.
 
 ## Build
 

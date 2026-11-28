@@ -752,6 +752,10 @@ class StanceChargeTest(_StubbedGameTest):
         self.assertIn('>98 s<', self.show(self.TIMER_ON, fight=40.0, at=102.5)[0]['text'])
         self.assertIn('>75 s<', self.show(self.TIMER_ON, fight=55.0, at=102.6)[0]['text'])
 
+    def test_grey_stance_holds_its_time_while_its_energy_is_unchanged(self):
+        for at in (100.0, 110.0, 160.0):
+            self.assertIn('>50 s<', self.show(self.TIMER_ON, fight=40.0, turbo=70.0, at=at)[1]['text'])
+
     def logged_rates(self):
         timer_module = sys.modules['gui.mods.gunner_hud.timer']
         notes = []

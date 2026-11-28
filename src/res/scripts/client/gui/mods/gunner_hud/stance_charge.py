@@ -42,7 +42,6 @@ def _stance_charge(state, stance, active_stance):
     if state.state & running:
         return None
     active = stance == active_stance
-    # The stance you're not in is estimated at the passive rate it would get once you switch to it.
     flags = state.state if active else STANCE_DANCE_STATE.ENERGY_TIMER_ON
     return StanceCharge(stance, energy, cost, gain_per_second(params, stance, flags), state.state, active)
 
@@ -81,8 +80,12 @@ class ChargeCountdown(object):
         if charge is None or charge.energy >= charge.cost or charge.rate <= 0:
             self.reset()
             return None
+        remaining = (charge.cost - charge.energy) / charge.rate
+        if not charge.active:
+            self.reset()
+            return remaining
         basis = (charge.energy, charge.rate)
         if basis != self._basis:
             self._basis = basis
             self._since = now
-        return max(0.0, (charge.cost - charge.energy) / charge.rate - (now - self._since))
+        return max(0.0, remaining - (now - self._since))
