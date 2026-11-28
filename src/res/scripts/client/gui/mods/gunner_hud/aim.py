@@ -18,6 +18,8 @@ SECONDS_RISE = 0.3
 TEXT_REFRESH = 0.2
 GREEN_HOLD = 0.3
 FADE_SECONDS = 0.4
+PENALTY_SETTLE = 1.0
+PENALTY_SHOWN_BELOW = 0.99
 _EPSILON = 1e-6
 
 
@@ -31,15 +33,16 @@ class DualAccuracy(object):
 
 
 class AimStatus(object):
-    __slots__ = ('fill', 'percent', 'seconds', 'limit', 'locked', 'cooldown')
+    __slots__ = ('fill', 'percent', 'seconds', 'limit', 'locked', 'cooldown', 'penalty')
 
-    def __init__(self, fill, percent, seconds, limit=None, locked=False, cooldown=None):
+    def __init__(self, fill, percent, seconds, limit=None, locked=False, cooldown=None, penalty=1.0):
         self.fill = fill
         self.percent = percent
         self.seconds = seconds
         self.limit = limit
         self.locked = locked
         self.cooldown = cooldown
+        self.penalty = penalty
 
 
 def seconds_to_aim(current, ideal, aiming_time):
@@ -59,7 +62,7 @@ def accurate_mode_active(ideal, hot_ideal, factor):
     return ideal < hot_ideal * (1 + factor) / 2
 
 
-def aim_status(current, stationary_best, aiming_time, dual=None):
+def aim_status(current, stationary_best, aiming_time, dual=None, penalty=1.0):
     accurate_ideal = stationary_best * dual.factor if dual is not None else stationary_best
     ideal = accurate_ideal if dual is not None and dual.active else stationary_best
     seconds = seconds_to_aim(current, ideal, aiming_time)
@@ -67,12 +70,44 @@ def aim_status(current, stationary_best, aiming_time, dual=None):
         current = ideal
     if dual is None:
         percent = _ratio(ideal, current)
-        return AimStatus(percent, percent, seconds)
+        return AimStatus(percent, percent, seconds, penalty=penalty)
     fill = _ratio(accurate_ideal, current)
     percent = fill / dual.factor
     if dual.active:
-        return AimStatus(fill, percent, seconds, limit=dual.factor)
-    return AimStatus(min(fill, dual.factor), percent, seconds, limit=dual.factor, locked=True, cooldown=dual.cooldown)
+        return AimStatus(fill, percent, seconds, limit=dual.factor, penalty=penalty)
+    return AimStatus(min(fill, dual.factor), percent, seconds, limit=dual.factor, locked=True, cooldown=dual.cooldown,
+                     penalty=penalty)
+
+
+class PenaltyTracker(object):
+    # See README, "Damaged gun, injured crew, stun".
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self._healthy = None
+        self._rise = None
+
+    def update(self, multiplier, penalised, now):
+        if penalised:
+            self._rise = None
+            if self._healthy is None or multiplier <= 0:
+                return 1.0
+            ratio = self._healthy / multiplier
+            return ratio if ratio < PENALTY_SHOWN_BELOW else 1.0
+        self._follow_healthy(multiplier, now)
+        return 1.0
+
+    def _follow_healthy(self, multiplier, now):
+        # A worse multiplier can reach the client just before the damage that caused it, so a rise only counts
+        # once it has held for a moment with no penalty on.
+        if self._healthy is None or multiplier <= self._healthy:
+            self._healthy, self._rise = multiplier, None
+        elif self._rise is None or abs(self._rise[0] - multiplier) > _EPSILON:
+            self._rise = (multiplier, now)
+        elif now - self._rise[1] >= PENALTY_SETTLE - _EPSILON:
+            self._healthy, self._rise = multiplier, None
 
 
 class CooldownTracker(object):
@@ -111,10 +146,10 @@ class CooldownTracker(object):
 
 class AimDisplay(object):
     __slots__ = ('fill', 'normal_reached', 'best_reached', 'fade', 'percent', 'seconds', 'limit', 'locked',
-                 'cooldown')
+                 'cooldown', 'penalty')
 
     def __init__(self, fill, normal_reached, best_reached, fade, percent, seconds, limit=None, locked=False,
-                 cooldown=None):
+                 cooldown=None, penalty=1.0):
         self.fill = fill
         self.normal_reached = normal_reached
         self.best_reached = best_reached
@@ -124,6 +159,7 @@ class AimDisplay(object):
         self.limit = limit
         self.locked = locked
         self.cooldown = cooldown
+        self.penalty = penalty
 
 
 class _Latch(object):
@@ -197,10 +233,12 @@ class AimSmoother(object):
             fill = max(self._fill, status.limit or 1.0)
         else:
             fill = self._fill
-        return AimDisplay(fill, normal_reached, best_reached, self._fade(now),
-                          self._update_percent(status, now, normal_reached, nothing_to_aim, reseed),
+        percent = self._update_percent(status, now, normal_reached, nothing_to_aim, reseed)
+        if status.penalty < 1.0:
+            percent = int(round(percent * status.penalty))
+        return AimDisplay(fill, normal_reached, best_reached, self._fade(now), percent,
                           self._update_seconds(status.seconds, now, nothing_to_aim, reseed),
-                          status.limit, status.locked, status.cooldown)
+                          status.limit, status.locked, status.cooldown, status.penalty)
 
     def _smooth(self, raw, now, reseed):
         if reseed:

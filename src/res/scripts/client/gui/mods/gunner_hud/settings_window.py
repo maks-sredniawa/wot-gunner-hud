@@ -5,6 +5,7 @@ FONT_SIZE_MAX = 24
 FIELDS = (
     ('enabled', ('enabled',)),
     ('aimTimer', ('aimTimer', 'enabled')),
+    ('aimPenalty', ('aimTimer', 'penalty')),
     ('autoreloaderLine', ('autoreloaderLine',)),
     ('magazineLine', ('magazineLine',)),
     ('aresLine', ('aresLine',)),
@@ -101,6 +102,12 @@ def _template(templates, values):
                 tooltip=_tooltip('Aim timer',
                                  'A bar to the right of the crosshair with the seconds until the gun is fully '
                                  'aimed. On the Type 71 line it also counts down the dual accuracy cooldown.')),
+            templates.createCheckbox(
+                'Aim penalty in red', 'aimPenalty', values['aimPenalty'],
+                tooltip=_tooltip('Aim penalty in red',
+                                 'When a damaged gun, an injured crew member or a stun makes your aim worse, the '
+                                 'aim timer\'s percentage turns red and shows how far you can aim compared with '
+                                 'a healthy tank, and a red block tops the bar.')),
             templates.createCheckbox(
                 'Magazine status in the reload command', 'reloadChatLine', values['reloadChatLine'],
                 tooltip=_tooltip('Magazine status in the reload command',

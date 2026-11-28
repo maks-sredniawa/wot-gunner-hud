@@ -5,8 +5,8 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'res', 'scripts', 'client', 'gui', 'mods'))
 
-from gunner_hud.aim import (AimSmoother, AimStatus, CooldownTracker, DualAccuracy, accurate_mode_active, aim_status,
-                            seconds_to_aim)
+from gunner_hud.aim import (AimSmoother, AimStatus, CooldownTracker, DualAccuracy, PenaltyTracker,
+                            accurate_mode_active, aim_status, seconds_to_aim)
 
 
 class SecondsToAimTest(unittest.TestCase):
@@ -306,6 +306,55 @@ class AimSmootherTest(unittest.TestCase):
             self.feed(AimStatus(0.6, 1.0, 0.0, limit=0.6, locked=True, cooldown=0.5))
         fades = [self.feed(AimStatus(1.0, 1 / 0.6, 0.0, limit=0.6)).fade for _ in range(8)]
         self.assertEqual([round(fade, 2) for fade in fades], [0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0])
+
+
+class PenaltyTrackerTest(unittest.TestCase):
+
+    def setUp(self):
+        self.tracker = PenaltyTracker()
+
+    def test_healthy_tank_has_no_penalty(self):
+        self.assertEqual(self.tracker.update(1.0, False, 0.0), 1.0)
+
+    def test_penalty_is_the_healthy_multiplier_over_the_damaged_one(self):
+        self.tracker.update(0.9, False, 0.0)
+        self.assertAlmostEqual(self.tracker.update(1.2, True, 1.0), 0.75)
+
+    def test_unknown_healthy_multiplier_shows_no_penalty(self):
+        self.assertEqual(self.tracker.update(1.2, True, 0.0), 1.0)
+
+    def test_tiny_penalty_is_not_shown(self):
+        self.tracker.update(1.0, False, 0.0)
+        self.assertEqual(self.tracker.update(1.005, True, 1.0), 1.0)
+
+    def test_worse_multiplier_arriving_before_the_damage_does_not_become_the_healthy_one(self):
+        self.tracker.update(1.0, False, 0.0)
+        self.tracker.update(1.25, False, 5.0)
+        self.tracker.update(1.25, False, 5.5)
+        self.assertAlmostEqual(self.tracker.update(1.25, True, 5.6), 0.8)
+
+    def test_a_lasting_rise_without_damage_becomes_the_new_healthy_multiplier(self):
+        self.tracker.update(1.0, False, 0.0)
+        self.tracker.update(1.1, False, 5.0)
+        self.tracker.update(1.1, False, 6.0)
+        self.assertAlmostEqual(self.tracker.update(1.1 * 1.25, True, 6.1), 0.8)
+
+    def test_better_multiplier_counts_at_once(self):
+        self.tracker.update(1.0, False, 0.0)
+        self.tracker.update(0.9, False, 0.1)
+        self.assertAlmostEqual(self.tracker.update(1.125, True, 0.2), 0.8)
+
+
+class PenalisedDisplayTest(unittest.TestCase):
+
+    def test_fully_aimed_under_penalty_reads_the_real_percent(self):
+        display = AimSmoother().update(aim_status(0.25, 0.25, 2.0, penalty=0.8), 0.0)
+        self.assertEqual((display.percent, display.penalty, display.fill), (80, 0.8, 1.0))
+        self.assertTrue(display.normal_reached)
+
+    def test_aiming_under_penalty_scales_the_stepped_percent(self):
+        display = AimSmoother().update(aim_status(0.5, 0.25, 2.0, penalty=0.8), 0.0)
+        self.assertEqual(display.percent, 40)
 
 
 if __name__ == '__main__':
