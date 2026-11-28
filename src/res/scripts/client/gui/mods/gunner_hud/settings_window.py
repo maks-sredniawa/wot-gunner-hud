@@ -6,6 +6,7 @@ FIELDS = (
     ('enabled', ('enabled',)),
     ('aimTimer', ('aimTimer', 'enabled')),
     ('aimPenalty', ('aimTimer', 'penalty')),
+    ('abilityCharge', ('abilityCharge', 'enabled')),
     ('autoreloaderLine', ('autoreloaderLine',)),
     ('magazineLine', ('magazineLine',)),
     ('aresLine', ('aresLine',)),
@@ -108,6 +109,11 @@ def _template(templates, values):
                                  'When a damaged gun, an injured crew member or a stun makes your aim worse, the '
                                  'aim timer\'s percentage turns red and shows how far you can aim compared with '
                                  'a healthy tank, and a red block tops the bar.')),
+            templates.createCheckbox(
+                'Ability charge time', 'abilityCharge', values['abilityCharge'],
+                tooltip=_tooltip('Ability charge time',
+                                 'On tanks with Fight and Turbo stances, such as the CS-67 Szakal, the estimated '
+                                 'seconds until the current stance\'s ability is charged, next to its gauge.')),
             templates.createCheckbox(
                 'Magazine status in the reload command', 'reloadChatLine', values['reloadChatLine'],
                 tooltip=_tooltip('Magazine status in the reload command',

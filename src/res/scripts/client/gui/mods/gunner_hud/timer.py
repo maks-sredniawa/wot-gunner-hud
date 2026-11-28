@@ -6,9 +6,9 @@ from debug_utils import LOG_CURRENT_EXCEPTION, LOG_NOTE
 from helpers import dependency
 from skeletons.gui.battle_session import IBattleSessionProvider
 
-from . import aim, config, gun_cooling, schedule
+from . import aim, config, gun_cooling, schedule, stance_charge
 from .aim_view import AimBarView
-from .view import PanelView, format_cooling, format_magazine, format_segments
+from .view import CHARGE_ALIAS, PanelView, format_cooling, format_magazine, format_segments
 
 TICK_SECONDS = 0.1
 _GUN = 'gun'
@@ -30,6 +30,9 @@ class GunnerHud(object):
         self._settings = config.load()
         self._view = None
         self._aim_view = None
+        self._charge_view = None
+        self._charge_countdown = stance_charge.ChargeCountdown()
+        self._charge_log = None
         self._cooldown = aim.CooldownTracker()
         self._aim_smoother = aim.AimSmoother()
         self._penalty = aim.PenaltyTracker()
@@ -46,6 +49,7 @@ class GunnerHud(object):
             return
         self._view = PanelView(self._settings, self._on_moved)
         self._sync_aim_view()
+        self._sync_charge_view()
         g_playerEvents.onAvatarReady += self._on_avatar_ready
         g_playerEvents.onAvatarBecomeNonPlayer += self._on_avatar_left
 
@@ -55,6 +59,7 @@ class GunnerHud(object):
             return
         self.start()
         self._sync_aim_view()
+        self._sync_charge_view()
 
     def _sync_aim_view(self):
         wanted = self._settings['aimTimer']['enabled']
@@ -66,6 +71,17 @@ class GunnerHud(object):
         elif not wanted and self._aim_view is not None:
             self._aim_view.destroy()
             self._aim_view = None
+
+    def _sync_charge_view(self):
+        wanted = self._settings['abilityCharge']['enabled']
+        if wanted and self._charge_view is None:
+            self._charge_view = PanelView(self._settings, self._on_moved, CHARGE_ALIAS, self._settings['abilityCharge'])
+            self._charge_countdown.reset()
+            if self._crosshair is not None:
+                self._on_crosshair_changed()
+        elif not wanted and self._charge_view is not None:
+            self._charge_view.destroy()
+            self._charge_view = None
 
     def stop(self):
         if self._view is None:
@@ -80,6 +96,9 @@ class GunnerHud(object):
         if self._aim_view is not None:
             self._aim_view.destroy()
             self._aim_view = None
+        if self._charge_view is not None:
+            self._charge_view.destroy()
+            self._charge_view = None
 
     @property
     def settings(self):
@@ -93,6 +112,8 @@ class GunnerHud(object):
         self._cooldown.reset()
         self._aim_smoother.reset()
         self._penalty.reset()
+        self._charge_countdown.reset()
+        self._charge_log = None
         self._last_accurate_mode = None
         self._last_penalty = None
         self._cancel_tick()
@@ -108,6 +129,8 @@ class GunnerHud(object):
             self._view.hide()
         if self._aim_view is not None:
             self._aim_view.hide()
+        if self._charge_view is not None:
+            self._charge_view.hide()
 
     def _cancel_tick(self):
         if self._callback_id is not None:
@@ -128,6 +151,13 @@ class GunnerHud(object):
                 LOG_CURRENT_EXCEPTION()
                 self._aim_smoother.reset()
                 self._aim_view.hide()
+        if self._charge_view is not None:
+            try:
+                self._charge_view.show(self._charge_segments())
+            except Exception:
+                LOG_CURRENT_EXCEPTION()
+                self._charge_countdown.reset()
+                self._charge_view.hide()
 
     def _watch_shots(self):
         self._unwatch_shots()
@@ -177,6 +207,8 @@ class GunnerHud(object):
             self._view.set_anchor(x, y, view_id)
             if self._aim_view is not None:
                 self._aim_view.set_anchor(x, y, view_id)
+            if self._charge_view is not None:
+                self._charge_view.set_anchor(x, y, view_id)
         except Exception:
             LOG_CURRENT_EXCEPTION()
 
@@ -220,6 +252,29 @@ class GunnerHud(object):
         if status is None or (self._settings['hideWhenFull'] and status.state == gun_cooling.COLD):
             return None
         return format_cooling(status, self._settings)
+
+    def _charge_segments(self):
+        charge = stance_charge.read_charge()
+        now = BigWorld.time()
+        self._log_charge(charge, now)
+        seconds = self._charge_countdown.update(charge, now)
+        if seconds is None:
+            return None
+        return [(stance_charge.format_seconds(seconds), self._settings['colors']['loading'])]
+
+    def _log_charge(self, charge, now):
+        if charge is None:
+            return
+        key = (charge.stance, charge.flags)
+        if self._charge_log is not None and self._charge_log[0] == key:
+            return
+        measured = None
+        if self._charge_log is not None and self._charge_log[0][0] == charge.stance and now > self._charge_log[2]:
+            measured = (charge.energy - self._charge_log[1]) / (now - self._charge_log[2])
+        LOG_NOTE('[gunner_hud] %s stance, flags %d, energy %.1f/%.0f, predicted %.2f/s, measured since last %s'
+                 % (charge.stance, charge.flags, charge.energy, charge.cost, charge.rate,
+                    'n/a' if measured is None else '%.2f/s' % measured))
+        self._charge_log = (key, charge.energy, now)
 
     def _aim_display(self):
         status = self._aim_status()

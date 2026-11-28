@@ -5,6 +5,7 @@ from gui.mods.gambiter.flash import COMPONENT_ALIGN, COMPONENT_EVENT, COMPONENT_
 from . import gun_cooling, schedule
 
 ALIAS = 'maksforgeGunnerHud'
+CHARGE_ALIAS = 'maksforgeGunnerHudCharge'
 SEPARATOR = '   '
 
 _SHADOW = {'color': 0x000000, 'alpha': 0.8, 'blurX': 2, 'blurY': 2, 'strength': 2, 'quality': 2}
@@ -60,8 +61,10 @@ def format_cooling(status, settings):
 
 class PanelView(object):
 
-    def __init__(self, settings, on_moved):
+    def __init__(self, settings, on_moved, alias=ALIAS, positions=None):
         self._settings = settings
+        self._positions = settings if positions is None else positions
+        self._alias = alias
         self._on_moved = on_moved
         self._shown = None
         self._anchor = (0, 0)
@@ -76,12 +79,12 @@ class PanelView(object):
             'drag': True,
         }
         props.update(self._position())
-        g_guiFlash.createComponent(ALIAS, COMPONENT_TYPE.LABEL, props)
+        g_guiFlash.createComponent(alias, COMPONENT_TYPE.LABEL, props)
         COMPONENT_EVENT.UPDATED += self._on_component_updated
 
     def destroy(self):
         COMPONENT_EVENT.UPDATED -= self._on_component_updated
-        g_guiFlash.deleteComponent(ALIAS)
+        g_guiFlash.deleteComponent(self._alias)
 
     def show(self, segments):
         text = self._html(segments) if segments else None
@@ -89,9 +92,9 @@ class PanelView(object):
             return
         self._shown = text
         if text is None:
-            g_guiFlash.updateComponent(ALIAS, {'visible': False})
+            g_guiFlash.updateComponent(self._alias, {'visible': False})
         else:
-            g_guiFlash.updateComponent(ALIAS, {'text': text, 'visible': True})
+            g_guiFlash.updateComponent(self._alias, {'text': text, 'visible': True})
 
     def hide(self):
         self.show(None)
@@ -101,10 +104,10 @@ class PanelView(object):
             return
         self._anchor = (x, y)
         self._view_id = view_id
-        g_guiFlash.updateComponent(ALIAS, self._position())
+        g_guiFlash.updateComponent(self._alias, self._position())
 
     def _position(self):
-        offset = view_offset(self._settings, self._view_id)
+        offset = view_offset(self._positions, self._view_id)
         return {'x': self._anchor[0] + offset['x'], 'y': self._anchor[1] + offset['y']}
 
     def _html(self, segments):
@@ -113,9 +116,9 @@ class PanelView(object):
         return "<font face='$FieldFont' size='%d'>%s</font>" % (self._settings['fontSize'], separator.join(parts))
 
     def _on_component_updated(self, alias, props):
-        if alias != ALIAS or 'x' not in props or 'y' not in props:
+        if alias != self._alias or 'x' not in props or 'y' not in props:
             return
-        offset = dragged_offset(self._settings, self._view_id)
+        offset = dragged_offset(self._positions, self._view_id)
         offset['x'] = int(props['x']) - self._anchor[0]
         offset['y'] = int(props['y']) - self._anchor[1]
         self._on_moved()

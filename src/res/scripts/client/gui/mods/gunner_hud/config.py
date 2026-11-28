@@ -28,6 +28,11 @@ DEFAULTS = {
         'x': 150,
         'y': 0,
     },
+    'abilityCharge': {
+        'enabled': True,
+        'x': -252,
+        'y': 45,
+    },
     'colors': {
         'count': 'D8D8D8',
         'loaded': 'C7FE48',
