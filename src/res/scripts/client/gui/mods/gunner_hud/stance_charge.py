@@ -59,7 +59,7 @@ def format_seconds(seconds):
 
 
 class ChargeCountdown(object):
-    """Counts down smoothly between the server's energy updates, which arrive once per gain tick."""
+    """Server energy updates arrive once per gain tick, so the countdown runs on between them."""
 
     def __init__(self):
         self.reset()

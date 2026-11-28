@@ -264,13 +264,17 @@ class GunnerHud(object):
 
     def _log_charge(self, charge, now):
         if charge is None:
+            self._charge_log = None
             return
+        last = self._charge_log
+        if last is not None and charge.energy < last[1]:
+            last = None
         key = (charge.stance, charge.flags)
-        if self._charge_log is not None and self._charge_log[0] == key:
+        if last is not None and last[0] == key:
             return
         measured = None
-        if self._charge_log is not None and self._charge_log[0][0] == charge.stance and now > self._charge_log[2]:
-            measured = (charge.energy - self._charge_log[1]) / (now - self._charge_log[2])
+        if last is not None and last[0][0] == charge.stance and now > last[2]:
+            measured = (charge.energy - last[1]) / (now - last[2])
         LOG_NOTE('[gunner_hud] %s stance, flags %d, energy %.1f/%.0f, predicted %.2f/s, measured since last %s'
                  % (charge.stance, charge.flags, charge.energy, charge.cost, charge.rate,
                     'n/a' if measured is None else '%.2f/s' % measured))

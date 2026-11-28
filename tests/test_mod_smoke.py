@@ -701,7 +701,7 @@ class GunCoolingTest(_StubbedGameTest):
 
 
 class StanceChargeTest(_StubbedGameTest):
-    TURBO, SWITCHING, ACTIVE_FIGHT, TIMER_ON, BOOSTED = 1, 2, 4, 16, 32
+    TURBO, SWITCHING, ACTIVE_FIGHT, ACTIVE_TURBO, TIMER_ON, BOOSTED = 1, 2, 4, 8, 16, 32
 
     def setUp(self):
         super(StanceChargeTest, self).setUp()
@@ -743,6 +743,29 @@ class StanceChargeTest(_StubbedGameTest):
         self.show(self.TIMER_ON, fight=40.0, at=100.0)
         self.assertIn('>98 s<', self.show(self.TIMER_ON, fight=40.0, at=102.5)['text'])
         self.assertIn('>75 s<', self.show(self.TIMER_ON, fight=55.0, at=102.6)['text'])
+
+    def logged_rates(self):
+        timer_module = sys.modules['gui.mods.gunner_hud.timer']
+        notes = []
+        original = timer_module.LOG_NOTE
+        timer_module.LOG_NOTE = notes.append
+        self.addCleanup(setattr, timer_module, 'LOG_NOTE', original)
+        return notes
+
+    def test_measured_rate_starts_again_after_the_ability_is_spent(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON | self.ACTIVE_TURBO, turbo=40.0, at=101.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=0.0, at=102.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
+        self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
+
+    def test_measured_rate_starts_again_when_energy_drops(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=0.0, at=102.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
+        self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
 
     def test_hides_when_ready_active_switching_or_not_gaining(self):
         self.assertFalse(self.show(self.TIMER_ON, fight=100.0)['visible'])
