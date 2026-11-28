@@ -86,6 +86,8 @@ Tanks with Fight and Turbo stances charge a separate energy gauge for each stanc
 - Switching stance swaps the colours.
 - Each time hides once its ability is ready or while it's running (the game shows its own timer). Both hide while the stance is switching and while the engine is destroyed.
 
+The rates come from your tank as the game sets it up, so the Szakal's field modifications that speed up passive Fight or Turbo gain (+25% each) and any crew or equipment bonuses are already included.
+
 The seconds assume you keep doing what you're doing now: they count the passive gain and the speed bonus that is on at this moment, never hits you haven't landed yet. Turn it off with `abilityCharge.enabled` or on the settings page. Drag either one with Ctrl like the other parts if it sits wrong at your resolution.
 
 ## Reload quick command
