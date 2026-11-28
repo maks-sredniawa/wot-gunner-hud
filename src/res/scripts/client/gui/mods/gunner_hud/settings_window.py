@@ -113,7 +113,8 @@ def _template(templates, values):
                 'Ability charge time', 'abilityCharge', values['abilityCharge'],
                 tooltip=_tooltip('Ability charge time',
                                  'On tanks with Fight and Turbo stances, such as the CS-67 Szakal, the estimated '
-                                 'seconds until the current stance\'s ability is charged, next to its gauge.')),
+                                 'seconds until each stance\'s ability is charged, beside its gauge. Amber is '
+                                 'the stance you\'re in, grey the other one.')),
             templates.createCheckbox(
                 'Magazine status in the reload command', 'reloadChatLine', values['reloadChatLine'],
                 tooltip=_tooltip('Magazine status in the reload command',

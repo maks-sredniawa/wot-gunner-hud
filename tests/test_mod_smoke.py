@@ -714,8 +714,8 @@ class StanceChargeTest(_StubbedGameTest):
         self.addCleanup(self.mod.fini)
         self.events.onAvatarReady()
 
-    def label(self):
-        return self.guiflash.components['maksforgeGunnerHudCharge']
+    def label(self, stance='fight'):
+        return self.guiflash.components['maksforgeGunnerHudCharge' + stance.capitalize()]
 
     def show(self, flags, fight=0.0, turbo=0.0, at=None):
         state = _Obj(state=flags, params=self.params, energyFight=fight, energyTurbo=turbo)
@@ -723,26 +723,34 @@ class StanceChargeTest(_StubbedGameTest):
         if at is not None:
             self.clock[0] = at
         self.callbacks[-1]()
-        return self.label()
+        return self.label('fight'), self.label('turbo')
 
     def test_tank_without_stances_shows_nothing(self):
         self.callbacks[-1]()
-        self.assertFalse(self.label()['visible'])
+        self.assertFalse(self.label('fight')['visible'])
+        self.assertFalse(self.label('turbo')['visible'])
 
-    def test_fight_stance_counts_its_own_gauge_at_the_passive_rate(self):
-        label = self.show(self.TIMER_ON, fight=40.0, turbo=99.0)
-        self.assertTrue(label['visible'])
-        self.assertIn("<font color='#FCAF1A'>100 s</font>", label['text'])
-        self.assertEqual((label['x'], label['y']), (-252, 45))
+    def test_fight_stance_is_amber_on_the_left_and_turbo_grey_on_the_right(self):
+        fight, turbo = self.show(self.TIMER_ON, fight=40.0, turbo=70.0)
+        self.assertIn("<font color='#FCAF1A'>100 s</font>", fight['text'])
+        self.assertIn("<font color='#A8A8A8'>50 s</font>", turbo['text'])
+        self.assertEqual((fight['x'], fight['y']), (-210, 71))
+        self.assertEqual((turbo['x'], turbo['y']), (210, 71))
 
     def test_turbo_stance_adds_the_speed_bonus_while_boosted(self):
-        self.assertIn('>94 s<', self.show(self.TURBO | self.TIMER_ON, fight=99.0, turbo=44.0)['text'])
-        self.assertIn('>13 s<', self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=44.0)['text'])
+        fight, turbo = self.show(self.TURBO | self.TIMER_ON, fight=70.0, turbo=44.0)
+        self.assertIn("<font color='#FCAF1A'>94 s</font>", turbo['text'])
+        self.assertIn("<font color='#A8A8A8'>50 s</font>", fight['text'])
+        self.assertIn('>13 s<', self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, fight=70.0, turbo=44.0)[1]['text'])
+
+    def test_grey_stance_ignores_the_speed_bonus_it_would_not_get(self):
+        turbo = self.show(self.TIMER_ON | self.BOOSTED, turbo=44.0)[1]
+        self.assertIn('>94 s<', turbo['text'])
 
     def test_counts_down_between_server_updates_and_drops_on_a_hit(self):
         self.show(self.TIMER_ON, fight=40.0, at=100.0)
-        self.assertIn('>98 s<', self.show(self.TIMER_ON, fight=40.0, at=102.5)['text'])
-        self.assertIn('>75 s<', self.show(self.TIMER_ON, fight=55.0, at=102.6)['text'])
+        self.assertIn('>98 s<', self.show(self.TIMER_ON, fight=40.0, at=102.5)[0]['text'])
+        self.assertIn('>75 s<', self.show(self.TIMER_ON, fight=55.0, at=102.6)[0]['text'])
 
     def logged_rates(self):
         timer_module = sys.modules['gui.mods.gunner_hud.timer']
@@ -760,6 +768,13 @@ class StanceChargeTest(_StubbedGameTest):
         self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
         self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
 
+    def test_measured_rate_starts_again_after_waiting_at_full(self):
+        notes = self.logged_rates()
+        self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
+        self.show(self.TURBO | self.TIMER_ON, turbo=100.0, at=150.0)
+        self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=100.0, at=200.0)
+        self.assertTrue(notes[-1].endswith('measured since last n/a'), notes[-1])
+
     def test_measured_rate_starts_again_when_energy_drops(self):
         notes = self.logged_rates()
         self.show(self.TURBO | self.TIMER_ON, turbo=40.0, at=100.0)
@@ -767,24 +782,28 @@ class StanceChargeTest(_StubbedGameTest):
         self.show(self.TURBO | self.TIMER_ON | self.BOOSTED, turbo=3.0, at=107.0)
         self.assertTrue(notes[-1].endswith('measured since last 0.60/s'), notes[-1])
 
-    def test_hides_when_ready_active_switching_or_not_gaining(self):
-        self.assertFalse(self.show(self.TIMER_ON, fight=100.0)['visible'])
-        self.assertFalse(self.show(self.TIMER_ON | self.ACTIVE_FIGHT, fight=0.0)['visible'])
-        self.assertFalse(self.show(self.TIMER_ON | self.SWITCHING, fight=40.0)['visible'])
-        self.assertFalse(self.show(0, fight=40.0)['visible'])
+    def test_hides_a_ready_or_running_ability_and_both_while_switching(self):
+        fight, turbo = self.show(self.TIMER_ON, fight=100.0, turbo=40.0)
+        self.assertFalse(fight['visible'])
+        self.assertTrue(turbo['visible'])
+        fight, turbo = self.show(self.TIMER_ON | self.ACTIVE_FIGHT, fight=0.0, turbo=40.0)
+        self.assertFalse(fight['visible'])
+        self.assertTrue(turbo['visible'])
+        self.assertFalse(any(label['visible'] for label in self.show(self.TIMER_ON | self.SWITCHING, 40.0, 40.0)))
+        self.assertFalse(self.show(0, fight=40.0)[0]['visible'])
 
-    def test_setting_off_removes_the_label(self):
+    def test_setting_off_removes_both_labels(self):
         self.mod._timer.settings['abilityCharge']['enabled'] = False
         self.mod._timer.apply_settings()
-        self.assertNotIn('maksforgeGunnerHudCharge', self.guiflash.components)
+        self.assertFalse([alias for alias in self.guiflash.components if 'Charge' in alias])
 
-    def test_dragging_saves_its_own_offset(self):
+    def test_dragging_saves_each_labels_own_offset(self):
         self.show(self.TIMER_ON, fight=40.0)
-        self.label().update(x=-300, y=80)
-        sys.modules['gui.mods.gambiter.flash'].COMPONENT_EVENT.UPDATED('maksforgeGunnerHudCharge', {'x': -300, 'y': 80})
+        self.label('turbo').update(x=300, y=80)
+        sys.modules['gui.mods.gambiter.flash'].COMPONENT_EVENT.UPDATED('maksforgeGunnerHudChargeTurbo', {'x': 300, 'y': 80})
         charge = self.mod._timer.settings['abilityCharge']
-        self.assertEqual((charge['x'], charge['y']), (-300, 80))
-        self.assertEqual((self.mod._timer.settings['x'], self.mod._timer.settings['y']), (0, 60))
+        self.assertEqual(charge['turbo'], {'x': 300, 'y': 80})
+        self.assertEqual(charge['fight'], {'x': -210, 'y': 71})
 
 
 class AimTimerTest(_StubbedGameTest):
